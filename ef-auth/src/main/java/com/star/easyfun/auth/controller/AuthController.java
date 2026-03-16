@@ -73,13 +73,13 @@ public class AuthController {
         }
 
         String userId = userBasicDBO.getUserId().toString();
-        boolean newDevice = false;
-        if (Strings.isNotEmpty(deviceId) && deviceService.checkDeviceId(userId, deviceId)) {
+        boolean isNewDeviceId = false;
+        if (Strings.isNotEmpty(deviceId) && deviceService.isDeviceIdExist(userId, deviceId)) {
             deviceService.cacheDeviceId(userId, deviceId);
         }
         else {
             deviceId = deviceService.generateDeviceId(userId);
-            newDevice = true;
+            isNewDeviceId = true;
         }
         JWTPairDTO jwtPairDTO;
         try {
@@ -89,7 +89,7 @@ public class AuthController {
             logger.error("ef-auth中，产生jwt时出现错误，错误由generateJWT方法抛出", e);
             return ResultUtil.fail_50000("系统内部错误，请稍后重试或联系客服");
         }
-        UserLoginResultDTO userLoginResultDTO = new UserLoginResultDTO(jwtPairDTO, deviceId, newDevice)
+        UserLoginResultDTO userLoginResultDTO = new UserLoginResultDTO(jwtPairDTO, deviceId, isNewDeviceId)
                 .setUserId(userId);
         return ResultUtil.success_10000(userLoginResultDTO, "登录成功");
     }
@@ -110,11 +110,14 @@ public class AuthController {
 
     @PostMapping("/refresh/token")
     public Result refreshToken(@RequestHeader(CommonRequestHeader.HEADER_REFRESH_TOKEN) String refreshToken,
-                               @RequestHeader(CommonRequestHeader.HEADER_DEVICE_ID) String deviceId) throws Exception {
+                               @RequestHeader(CommonRequestHeader.HEADER_DEVICE_ID) String deviceId,
+                               @RequestHeader(CommonRequestHeader.HEADER_USER_ID) String userId) throws Exception {
         JWTPairDTO jwtPairDTO = jWTCoreService.refreshToken(refreshToken, deviceId);
         if (jwtPairDTO == null) {
             return ResultUtil.fail_30001("RefreshToken无效");
         }
+        // 刷新DeviceId的过期时间
+        deviceService.cacheDeviceId(userId, deviceId);
         return ResultUtil.success_10000(jwtPairDTO, "刷新AccessToken成功");
     }
 

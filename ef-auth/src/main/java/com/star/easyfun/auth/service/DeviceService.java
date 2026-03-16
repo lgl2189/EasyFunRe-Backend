@@ -3,16 +3,16 @@ package com.star.easyfun.auth.service;
 public interface DeviceService {
 
     /**
-     * 检查设备码是否与该用户的其他设备码冲突
+     * 检查设备码是否已经被该用户使用，同时刷新提供的设备码的过期时间
      *
      * @param userId 用户ID
      * @param deviceId 需要检查的设备码
-     * @return true：设备码可用，false：设备码冲突
+     * @return true：设备码存在，false：设备码不存在
      */
-    boolean checkDeviceId(String userId, String deviceId);
+    boolean isDeviceIdExist(String userId, String deviceId);
 
     /**
-     * 缓存设备码
+     * 缓存设备码，如果已存在则刷新过期时间
      * @param userId 用户ID
      * @param deviceId 设备码
      */
