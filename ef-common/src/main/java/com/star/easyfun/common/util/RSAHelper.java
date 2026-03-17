@@ -67,4 +67,14 @@ public class RSAHelper {
             throw new RuntimeException("生成RSA密钥对失败", e);
         }
     }
+
+    /**
+     * 将 RSA 公钥编码为 Base64 字符串
+     * 注：默认使用 X.509 标准格式编码公钥
+     */
+    public String getPublicKeyBase64String() {
+        // 1. 获取公钥的二进制编码（X.509 格式）
+        // 2. 使用 Java 8+ 标准 Base64 编码器编码为字符串
+        return Base64.getEncoder().encodeToString(jwtProperty.getRsa().getPublicKey().getBytes());
+    }
 }

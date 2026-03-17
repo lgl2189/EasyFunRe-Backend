@@ -1,5 +1,11 @@
 package com.star.easyfun.auth.service;
 
+/**
+ * @author ：Star
+ * @description ：    与DeviceId相关服务接口实现
+ * @date ：2026 2月 24 20:10
+ */
+// TODO: 当前过期设备码的清理依托于用户访问，如果用户再也没有登录过，过期的设备码就不会被删除，可以增加定时删除机制，不重要，暂不实现
 public interface DeviceService {
 
     /**

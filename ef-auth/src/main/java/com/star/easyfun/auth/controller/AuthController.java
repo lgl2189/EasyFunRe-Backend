@@ -11,6 +11,7 @@ import com.star.easyfun.auth.util.RequestUtil;
 import com.star.easyfun.common.constant.CommonRequestHeader;
 import com.star.easyfun.common.pojo.dto.JWTPairDTO;
 import com.star.easyfun.common.pojo.dto.Result;
+import com.star.easyfun.common.util.RSAHelper;
 import com.star.easyfun.common.util.ResultUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class AuthController {
     private final SmsServiceImpl smsServiceImpl;
     private final JWTCoreService jWTCoreService;
     private final DeviceService deviceService;
+    private final RSAHelper rsaHelper;
     private static final Logger logger = LogManager.getLogger(AuthController.class);
 
     @GetMapping("/login/sms")
@@ -139,5 +141,12 @@ public class AuthController {
             return ResultUtil.fail_30002("Token 格式错误或解析失败");
         }
         return ResultUtil.success_10000(null, "无效化Token成功");
+    }
+
+    @GetMapping("/rsa/public-key")
+    public Result getPublicKey() {
+        Map<String, String> result = new HashMap<>();
+        result.put("publicKey", rsaHelper.getPublicKeyBase64String());
+        return ResultUtil.success_10000(result, "获取公钥成功");
     }
 }
