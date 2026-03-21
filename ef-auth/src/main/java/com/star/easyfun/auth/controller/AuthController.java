@@ -1,5 +1,11 @@
 package com.star.easyfun.auth.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSVerifier;
+import com.nimbusds.jose.crypto.RSASSAVerifier;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import com.star.easyfun.auth.pojo.dbo.UserBasicDBO;
 import com.star.easyfun.auth.pojo.dto.UserLoginDTO;
 import com.star.easyfun.auth.pojo.dto.UserLoginResultDTO;
@@ -11,6 +17,7 @@ import com.star.easyfun.auth.util.RequestUtil;
 import com.star.easyfun.common.constant.CommonRequestHeader;
 import com.star.easyfun.common.pojo.dto.JWTPairDTO;
 import com.star.easyfun.common.pojo.dto.Result;
+import com.star.easyfun.common.pojo.dto.TokenPayLoad;
 import com.star.easyfun.common.util.RSAHelper;
 import com.star.easyfun.common.util.ResultUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +28,8 @@ import org.mapstruct.ap.internal.util.Strings;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.interfaces.RSAPublicKey;
+import java.text.ParseException;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +48,7 @@ public class AuthController {
     private final JWTCoreService jWTCoreService;
     private final DeviceService deviceService;
     private final RSAHelper rsaHelper;
+    private final ObjectMapper objectMapper;
     private static final Logger logger = LogManager.getLogger(AuthController.class);
 
     @GetMapping("/login/sms")
@@ -111,12 +121,37 @@ public class AuthController {
     }
 
     @PostMapping("/refresh/token")
-    public Result refreshToken(@RequestHeader(CommonRequestHeader.HEADER_REFRESH_TOKEN) String refreshToken,
-                               @RequestHeader(CommonRequestHeader.HEADER_DEVICE_ID) String deviceId,
-                               @RequestHeader(CommonRequestHeader.HEADER_USER_ID) String userId) throws Exception {
+    public Result refreshToken(@RequestHeader(CommonRequestHeader.HEADER_AUTHORIZATION) String accessTokenHeader,
+                               @RequestHeader(CommonRequestHeader.HEADER_REFRESH_TOKEN) String refreshToken,
+                               @RequestHeader(CommonRequestHeader.HEADER_DEVICE_ID) String deviceId) throws Exception {
+        // 检验AccessToken的是否为由系统签发，只是过期
+        SignedJWT signedJWT;
+        try {
+            String accessToken = accessTokenHeader.substring(7).trim();
+            signedJWT = SignedJWT.parse(accessToken);
+            RSAPublicKey rsaPublicKey = rsaHelper.getPublicRSAKey();
+            JWSVerifier verifier = new RSASSAVerifier(rsaPublicKey);
+            if (!signedJWT.verify(verifier)) {
+                return ResultUtil.fail_30002("AccessToken无效");
+            }
+        }
+        catch (JOSEException | ParseException e) {
+            return ResultUtil.fail_30002("AccessToken无效");
+        }
+        String userId;
+        try {
+            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+            String subject = claims.getSubject();
+            TokenPayLoad tokenPayLoad = objectMapper.readValue(subject, TokenPayLoad.class);
+            userId = tokenPayLoad.getUserId();
+        }
+        catch (Exception e) {
+            return ResultUtil.fail_30002("从AccessToken提起用户名失败");
+        }
+        // 校验RefreshToken并获取新的JWTPairDTO
         JWTPairDTO jwtPairDTO = jWTCoreService.refreshToken(refreshToken, deviceId);
         if (jwtPairDTO == null) {
-            return ResultUtil.fail_30001("RefreshToken无效");
+            return ResultUtil.fail_30002("RefreshToken无效");
         }
         // 刷新DeviceId的过期时间
         deviceService.cacheDeviceId(userId, deviceId);

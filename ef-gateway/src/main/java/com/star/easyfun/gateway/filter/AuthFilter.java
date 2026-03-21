@@ -50,14 +50,14 @@ public class AuthFilter implements WebFilter {
     private final JWTHelper jwtHelper;
     private final RedisTemplate<String, Object> redisTemplate;
 
-    private final AntPathMatcher authPathMatcher = new AntPathMatcher();
+    private final AntPathMatcher antPathMatcher = new AntPathMatcher();
     private static final Logger logger = LogManager.getLogger(AuthFilter.class);
 
     @Override
     public Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
         String currentPath = exchange.getRequest().getPath().value();
         for (String path : RequestUrlConstant.gatewaySecurityIgnoreUrlList) {
-            if (authPathMatcher.match(path, currentPath)) {
+            if (antPathMatcher.match(path, currentPath)) {
                 return chain.filter(exchange);
             }
         }

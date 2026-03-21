@@ -10,7 +10,8 @@ package com.star.easyfun.gateway.constant;
 public class RequestUrlConstant {
     public static final String[] gatewaySecurityIgnoreUrlList = {
             "/auth/login/sms",
-            "/auth/login/sms",
             "/auth/login/password",
+            "/auth/login/token",
+            "/auth/refresh/token"
     };
 }
