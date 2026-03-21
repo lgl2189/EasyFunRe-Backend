@@ -155,7 +155,11 @@ public class AuthController {
         }
         // 刷新DeviceId的过期时间
         deviceService.cacheDeviceId(userId, deviceId);
-        return ResultUtil.success_10000(jwtPairDTO, "刷新AccessToken成功");
+        Map<String,Object> result = new HashMap<>();
+        result.put("userId", userId);
+        result.put("accessToken", jwtPairDTO.getAccessToken());
+        result.put("refreshToken", jwtPairDTO.getRefreshToken());
+        return ResultUtil.success_10000(result, "刷新AccessToken成功");
     }
 
     @PostMapping("/logout")
