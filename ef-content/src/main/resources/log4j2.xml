@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 开启ANSI颜色支持 + 监控配置变更 + 基础日志级别 -->
+<Configuration status="warn" monitorInterval="30" ansi="true">
+    <Properties>
+        <!-- 核心日志格式：带颜色 + 时间 + 线程 + 级别 + 类名 + 追踪ID + 日志内容 -->
+        <!-- %highlight{} 是Log4j2的高亮指令，按级别自动匹配颜色 -->
+        <Property name="LOG_PATTERN">
+            %d{yyyy-MM-dd HH:mm:ss.SSS} [%style{%t}{cyan}] %highlight{%-5level}{
+            TRACE=bright_black,
+            DEBUG=blue,
+            INFO=green,
+            WARN=yellow,
+            ERROR=red,
+            FATAL=bright_red
+            } %style{%logger{36}}{magenta} [%style{%X{traceId}}{bright_yellow}] - %msg%n
+        </Property>
+        <!-- 日志文件存储路径 -->
+        <Property name="LOG_PATH">logs</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- 控制台输出（核心美化目标） -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <!-- 启用PatternLayout + 颜色格式 -->
+            <PatternLayout pattern="${LOG_PATTERN}" disableAnsi="false"/>
+        </Console>
+
+        <!-- 滚动文件输出（可选，文件日志不显示颜色，避免乱码） -->
+<!--        <RollingFile name="RollingFile" fileName="${LOG_PATH}/ef-user.log"-->
+<!--                     filePattern="${LOG_PATH}/app-%d{yyyy-MM-dd}-%i.log.gz">-->
+<!--            &lt;!&ndash; 文件日志移除颜色编码，仅保留纯文本格式 &ndash;&gt;-->
+<!--            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId}] - %msg%n"/>-->
+<!--            <Policies>-->
+<!--                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>-->
+<!--                <SizeBasedTriggeringPolicy size="100 MB"/>-->
+<!--            </Policies>-->
+<!--            <DefaultRolloverStrategy max="30">-->
+<!--                <Delete basePath="${LOG_PATH}" maxDepth="1">-->
+<!--                    <IfFileName glob="app-*.log.gz"/>-->
+<!--                    <IfLastModified age="30d"/>-->
+<!--                    <IfAccumulatedFileSize exceeds="10 GB"/>-->
+<!--                </Delete>-->
+<!--            </DefaultRolloverStrategy>-->
+<!--        </RollingFile>-->
+    </Appenders>
+
+    <Loggers>
+        <!-- 业务包日志级别 -->
+        <Logger name="com.star.easyfun" level="debug" additivity="false">
+            <AppenderRef ref="Console"/>
+<!--            <AppenderRef ref="RollingFile"/> &lt;!&ndash; 启用文件输出 &ndash;&gt;-->
+        </Logger>
+        <!-- 根日志级别 -->
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+<!--            <AppenderRef ref="RollingFile"/> &lt;!&ndash; 启用文件输出 &ndash;&gt;-->
+        </Root>
+    </Loggers>
+</Configuration>
