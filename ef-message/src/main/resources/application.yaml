@@ -17,9 +17,9 @@ spring:
       - optional:nacos:ef-message
       - optional:nacos:ef-message-${spring.profiles.active}
       - optional:nacos:ef-nacos
-      - optional:nacos:ef-mysql
+#      - optional:nacos:ef-mysql
       - optional:nacos:ef-redis
-      - optional:nacos:ef-mybatis
+#      - optional:nacos:ef-mybatis
       - optional:nacos:ef-jackson
       - optional:nacos:ef-jwt
       - optional:nacos:ef-rabbitmq
