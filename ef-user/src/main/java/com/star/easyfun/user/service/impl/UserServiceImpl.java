@@ -1,6 +1,7 @@
 package com.star.easyfun.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.common.base.Strings;
 import com.star.easyfun.user.mapper.UserBasicMapper;
 import com.star.easyfun.user.mapper.UserProfileMapper;
@@ -26,7 +27,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @RequiredArgsConstructor
 @Service
-public class UserServiceImpl implements UserService {
+public class UserServiceImpl extends ServiceImpl<UserBasicMapper, UserBasicDBO> implements UserService {
     private final UserBasicMapper userBasicMapper;
     private final UserProfileMapper userProfileMapper;
     private final UserStructMapper userStructMapper;
@@ -55,14 +56,14 @@ public class UserServiceImpl implements UserService {
         UserBasicDBO userBasicDBO = userStructMapper.fromUserAllInfoDTOToBasicDBO(userAllInfoDTO);
         UserProfileDBO userProfileDBO = userStructMapper.fromUserAllInfoDTOToProfileDBO(userAllInfoDTO);
         userBasicMapper.updateById(userBasicDBO);
-        boolean hasProfile = userProfileMapper.selectById(userAllInfoDTO.getUserId()) != null;
-        if(hasProfile){
-            LambdaQueryWrapper<UserProfileDBO> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(UserProfileDBO::getUserId, userAllInfoDTO.getUserId());
+        LambdaQueryWrapper<UserProfileDBO> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(UserProfileDBO::getUserId, userAllInfoDTO.getUserId());
+        boolean hasProfile = userProfileMapper.selectOne(queryWrapper) != null;
+        if (hasProfile) {
             int update = userProfileMapper.update(userProfileDBO, queryWrapper);
             return update == 1;
         }
-        else{
+        else {
             return userProfileMapper.insert(userProfileDBO) == 1;
         }
     }
