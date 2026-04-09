@@ -32,22 +32,20 @@ public class MinioService {
     // 1. 上传文件（返回预签名下载URL）
     public String upload(MultipartFile file, String folder) throws Exception {
         String objectName = folder + "/"
-                + UUID.randomUUID()
-                + "_" + file.getOriginalFilename();
+                + UUID.randomUUID();
 
         minioClient.putObject(
                 PutObjectArgs.builder()
                         .bucket(minioProperty.getBucket())
                         .object(objectName)
-                        .stream(file.getInputStream(), file.getSize(), -1)
+                        .stream(file.getInputStream(), file.getSize(), 10 * 1024 * 1024)// 10MB
                         .contentType(file.getContentType())
                         .build()
         );
-
-        return getPresignedGetUrl(objectName, minioProperty.getExpirySeconds());
+        return objectName;
     }
 
-    // 2. 获取预签名下载URL（前端直接访问，推荐）
+    // 2. 获取预签名下载URL
     public String getPresignedGetUrl(String objectName, int expirySeconds) throws Exception {
         return minioClient.getPresignedObjectUrl(
                 GetPresignedObjectUrlArgs.builder()
@@ -71,7 +69,7 @@ public class MinioService {
         );
     }
 
-    // 4. 下载文件流（后端使用）
+    // 4. 下载文件流
     public InputStream download(String objectName) throws Exception {
         return minioClient.getObject(
                 GetObjectArgs.builder()
@@ -108,7 +106,8 @@ public class MinioService {
         try {
             ensureBucketExists();
             logger.info("MinIO 默认桶已就绪: {}", minioProperty.getBucket());
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             logger.error("MinIO 桶初始化失败: {}", e.getMessage());
         }
     }
