@@ -20,24 +20,25 @@ import java.time.LocalDateTime;
  */
 
 @RestController
+@RequestMapping("/account")
 @RequiredArgsConstructor
 public class AccountController {
 
     private final UserService userService;
 
-    @GetMapping("/account/info-all")
+    @GetMapping("/info-all")
     public Result getUserAllInfo(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) String headerUserId) {
         UserAllInfoDTO userAllInfoDTO = userService.getUserAllInfo(headerUserId);
         return ResultUtil.success_10000(userAllInfoDTO, "成功获取用户所有信息");
     }
 
-    @GetMapping("/account/info-public")
+    @GetMapping("/info-public")
     public Result getUserPublicInfo(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) String headerUserId) {
         UserPublicInfoDTO userPublicInfo = userService.getUserPublicInfo(headerUserId);
         return ResultUtil.success_10000(userPublicInfo, "成功获取用户公开信息");
     }
 
-    @PutMapping("/account/info-all")
+    @PutMapping("/info-all")
     public Result updateUserAllInfo(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) String headerUserId,
                                     @RequestBody @Validated(UserAllInfoDTO.UpdateInfo.class) UserAllInfoDTO userAllInfoDTO) {
         if (!headerUserId.equals(userAllInfoDTO.getUserId())) {
@@ -51,7 +52,7 @@ public class AccountController {
         return ResultUtil.success_10000(userAllInfoDTO, "修改用户信息成功");
     }
 
-    @PutMapping("/account/password")
+    @PutMapping("/password")
     public Result updateUserPassword(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) String headerUserId,
                                      @RequestBody @Validated UserPasswordDTO userPasswordDTO) {
         if (!headerUserId.equals(userPasswordDTO.getUserId())) {
