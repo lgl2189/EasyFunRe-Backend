@@ -73,7 +73,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result handleException(Exception e) {
-        logger.error("通用错误处理器GlobalExceptionHandler中，出现全局Exception错误");
-        throw new RuntimeException(e);
+        // 1. 记录详细错误日志（最重要！）
+        logger.error("系统发生未捕获异常", e);   // 这样会打印完整堆栈 + 异常信息
+
+        // 2. 返回给前端友好的提示（不要把堆栈暴露给用户）
+        String errorMsg = "服务器内部错误，请稍后重试";
+
+        return ResultUtil.fail_50000(errorMsg);
     }
 }
