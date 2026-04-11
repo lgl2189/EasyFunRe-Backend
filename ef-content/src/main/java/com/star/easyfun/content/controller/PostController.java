@@ -5,7 +5,6 @@ import com.star.easyfun.common.pojo.dto.Result;
 import com.star.easyfun.common.util.ResultUtil;
 import com.star.easyfun.content.pojo.dto.VideoPostDTO;
 import com.star.easyfun.content.service.ContentService;
-import com.star.easyfun.content.service.MinioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -14,14 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * @author ：Star
- * @description ：无描述
+ * @description ：所有与投稿有关的接口
  * @date ：2026 3月 26 18:11
  */
 
 @RestController
 @RequestMapping("/upload")
 @RequiredArgsConstructor
-public class UploadController {
+public class PostController {
     private final ContentService contentService;
 
     @PostMapping(value = "/post/video")
