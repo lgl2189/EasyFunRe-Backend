@@ -1,6 +1,6 @@
 package com.star.easyfun.content.service.impl;
 
-import com.star.easyfun.content.constant.UploadConstant;
+import com.star.easyfun.content.constant.PostConstant;
 import com.star.easyfun.content.mapper.ContentAssetMapper;
 import com.star.easyfun.content.mapper.ContentPostAssetsMapper;
 import com.star.easyfun.content.mapper.ContentPostMapper;
@@ -59,7 +59,7 @@ public class ContentServiceImpl implements ContentService {
         if (dto.getCoverList() != null && !dto.getCoverList().isEmpty()) {
             MultipartFile coverFile = dto.getCoverList().getFirst();
             try {
-                coverKey = minioService.upload(coverFile, UploadConstant.UPLOAD_POST_COVER_FOLDER);
+                coverKey = minioService.upload(coverFile, PostConstant.UPLOAD_POST_COVER_FOLDER);
 
                 // 保存封面到 content_asset
                 ContentAsset coverAsset = buildContentAsset(coverFile, coverKey, 2, // 2=图片
@@ -87,7 +87,7 @@ public class ContentServiceImpl implements ContentService {
 
             try {
                 // 上传到 MinIO video/ 目录
-                String videoKey = minioService.upload(videoFile, UploadConstant.UPLOAD_POST_VIDEO_FOLDER);
+                String videoKey = minioService.upload(videoFile, PostConstant.UPLOAD_POST_VIDEO_FOLDER);
 
                 // 保存视频到 content_asset
                 ContentAsset videoAsset = buildContentAsset(videoFile, videoKey, 1, // 1=视频

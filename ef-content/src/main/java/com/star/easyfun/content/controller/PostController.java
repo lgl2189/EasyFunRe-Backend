@@ -18,12 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
  */
 
 @RestController
-@RequestMapping("/upload")
+@RequestMapping("/post")
 @RequiredArgsConstructor
 public class PostController {
     private final ContentService contentService;
 
-    @PostMapping(value = "/post/video")
+    @PostMapping(value = "/video")
     public Result uploadPost(VideoPostDTO videoPostDTO,@RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId) {
         // 调用业务层发布投稿
         contentService.uploadVideoPost(videoPostDTO,userId);

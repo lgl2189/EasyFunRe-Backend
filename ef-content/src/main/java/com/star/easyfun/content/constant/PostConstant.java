@@ -7,7 +7,7 @@ package com.star.easyfun.content.constant;
  */
 
 
-public class UploadConstant {
+public class PostConstant {
     public static final String UPLOAD_POST_VIDEO_FOLDER = "/post/video";
     public static final String UPLOAD_POST_COVER_FOLDER = "/post/cover";
 
