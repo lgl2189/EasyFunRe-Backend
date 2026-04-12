@@ -24,7 +24,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Accessors(chain = true)
-public class VideoPostDTO {
+public class VideoPostUploadDTO {
 
     /**
      * 投稿标题 -> 对应post表title：VARCHAR(255) 非空

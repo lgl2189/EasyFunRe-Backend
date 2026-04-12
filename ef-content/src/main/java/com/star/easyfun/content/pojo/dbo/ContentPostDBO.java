@@ -2,6 +2,7 @@ package com.star.easyfun.content.pojo.dbo;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
@@ -19,9 +20,10 @@ import java.time.LocalDateTime;
  */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 @Accessors(chain = true)
 @TableName("content_post")
-public class ContentPost implements Serializable {
+public class ContentPostDBO implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
@@ -43,7 +45,7 @@ public class ContentPost implements Serializable {
      */
     private String description;
     /**
-     * 投稿封面图地址
+     * 投稿封面图Key
      */
     private String coverKey;
     /**

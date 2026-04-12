@@ -1,35 +1,24 @@
-package com.star.easyfun.content.pojo.dbo;
+package com.star.easyfun.content.pojo.dto;
 
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 
-import java.io.Serial;
-import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 内容信息表 - 存储一个资源本身的信息(content_asset)实体类
- *
- * @author Star
- * @since 2026-04-08 21:08:39
- * @description 
+ * @author ：Star
+ * @description ：    表示一个资源的所有信息
+ * @date ：2026 4月 12 14:47
  */
+
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 @Accessors(chain = true)
-@TableName("content_resource")
-public class ContentResource implements Serializable {
-    @Serial
-    private static final long serialVersionUID = 1L;
-
-    /**
-     * 内容的唯一标识，自增主键
-     */
-    @TableId
-	private Long resourceId;
+public class ContentResourceDTO {
+    private Long resourceId;
     /**
      * 内容类型：1=视频，2=图片，3=音频，4=文本，5=其他
      */
@@ -42,6 +31,10 @@ public class ContentResource implements Serializable {
      * 内容的简介
      */
     private String description;
+    /**
+     * Minio预签名下载URL
+     */
+    private String fileUrl;
     /**
      * 云存储原始key
      */
@@ -75,6 +68,10 @@ public class ContentResource implements Serializable {
      */
     private Long ownerId;
     /**
+     * 排序序号（同一个投稿内内容的显示顺序，从小到大）
+     */
+    private Integer sortOrder;
+    /**
      * 内容的创建时间
      */
     private LocalDateTime createdDatetime;
@@ -82,5 +79,4 @@ public class ContentResource implements Serializable {
      * 内容的更新时间（需手动维护）
      */
     private LocalDateTime updatedDatetime;
-
 }

@@ -2,6 +2,7 @@ package com.star.easyfun.content.pojo.dbo;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
@@ -19,9 +20,10 @@ import java.time.LocalDateTime;
  */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 @Accessors(chain = true)
 @TableName("content_post_resource")
-public class ContentPostResource implements Serializable {
+public class ContentPostResourceDBO implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 

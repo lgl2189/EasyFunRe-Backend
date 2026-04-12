@@ -9,4 +9,9 @@
         post_id,owner_id,title,description,cover_url,post_type,is_visibility,allow_comment,status,view_count,like_count,comment_count,comment_area_id,created_at,published_at,updated_datetime
     </sql>
 
+    <select id="selectResourceList" resultType="com.star.easyfun.content.pojo.dto.ContentResourceDTO">
+        SELECT pr.*,r.* from content_post_resource pr
+        LEFT JOIN content_resource r on r.resource_id = pr.resource_id
+        WHERE pr.post_id = #{postId}
+    </select>
 </mapper>

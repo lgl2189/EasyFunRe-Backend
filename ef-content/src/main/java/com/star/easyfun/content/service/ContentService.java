@@ -1,6 +1,7 @@
 package com.star.easyfun.content.service;
 
-import com.star.easyfun.content.pojo.dto.VideoPostDTO;
+import com.star.easyfun.content.pojo.dto.ContentPostDTO;
+import com.star.easyfun.content.pojo.dto.VideoPostUploadDTO;
 
 /**
  * @author ：Star
@@ -14,12 +15,12 @@ public interface ContentService {
      * 完整视频投稿发布
      * @return 新生成的 postId
      */
-    Long uploadVideoPost(VideoPostDTO dto, Long ownerId);
+    Long uploadVideoPost(VideoPostUploadDTO dto, Long ownerId);
 
     /**
-     * 获取视频投稿的播放地址
+     * 获取投稿的所有信息
      * @param postId 投稿id
-     * @return 播放地址
+     * @return 投稿信息
      */
-    String getVideoPlayUrl(Long postId) throws Exception;
+    ContentPostDTO getPost(Long postId) throws Exception;
 }

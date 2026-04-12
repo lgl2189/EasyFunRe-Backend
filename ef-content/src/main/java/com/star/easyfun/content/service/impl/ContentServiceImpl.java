@@ -1,13 +1,17 @@
 package com.star.easyfun.content.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.star.easyfun.content.constant.PostConstant;
 import com.star.easyfun.content.mapper.ContentPostMapper;
 import com.star.easyfun.content.mapper.ContentPostResourceMapper;
 import com.star.easyfun.content.mapper.ContentResourceMapper;
-import com.star.easyfun.content.pojo.dbo.ContentPost;
-import com.star.easyfun.content.pojo.dbo.ContentPostResource;
-import com.star.easyfun.content.pojo.dbo.ContentResource;
-import com.star.easyfun.content.pojo.dto.VideoPostDTO;
+import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
+import com.star.easyfun.content.pojo.dbo.ContentPostResourceDBO;
+import com.star.easyfun.content.pojo.dbo.ContentResourceDBO;
+import com.star.easyfun.content.pojo.dto.ContentPostDTO;
+import com.star.easyfun.content.pojo.dto.ContentResourceDTO;
+import com.star.easyfun.content.pojo.dto.VideoPostUploadDTO;
+import com.star.easyfun.content.pojo.mapper.PostStructMapper;
 import com.star.easyfun.content.service.ContentService;
 import com.star.easyfun.content.service.MinioService;
 import lombok.RequiredArgsConstructor;
@@ -33,12 +37,14 @@ public class ContentServiceImpl implements ContentService {
     private final ContentResourceMapper resourceMapper;
     private final ContentPostResourceMapper postResourceMapper;
 
+    private final PostStructMapper postStructMapper;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long uploadVideoPost(VideoPostDTO dto, Long ownerId) {
+    public Long uploadVideoPost(VideoPostUploadDTO dto, Long ownerId) {
 
-        // 1. 创建 ContentPost 主表
-        ContentPost post = new ContentPost();
+        // 1. 创建 ContentPostDBO 主表
+        ContentPostDBO post = new ContentPostDBO();
         post.setOwnerId(ownerId);
         post.setTitle(dto.getPostTitle());
         post.setDescription(dto.getPostDescription() != null ? dto.getPostDescription() : "");
@@ -62,7 +68,7 @@ public class ContentServiceImpl implements ContentService {
                 coverKey = minioService.upload(coverFile, PostConstant.UPLOAD_POST_COVER_FOLDER);
 
                 // 保存封面到 content_asset
-                ContentResource coverAsset = buildContentAsset(coverFile, coverKey, 2, // 2=图片
+                ContentResourceDBO coverAsset = buildContentAsset(coverFile, coverKey, 2, // 2=图片
                         dto.getPostTitle() + " 封面", ownerId);
                 resourceMapper.insert(coverAsset);
 
@@ -90,13 +96,13 @@ public class ContentServiceImpl implements ContentService {
                 String videoKey = minioService.upload(videoFile, PostConstant.UPLOAD_POST_VIDEO_FOLDER);
 
                 // 保存视频到 content_asset
-                ContentResource videoAsset = buildContentAsset(videoFile, videoKey, 1, // 1=视频
+                ContentResourceDBO videoAsset = buildContentAsset(videoFile, videoKey, 1, // 1=视频
                         videoTitle, ownerId);
                 // 可选：这里可以调用 FFmpeg 获取时长 duration（后面再加）
                 resourceMapper.insert(videoAsset);
 
                 // 建立投稿与资源的关联
-                ContentPostResource relation = new ContentPostResource();
+                ContentPostResourceDBO relation = new ContentPostResourceDBO();
                 relation.setPostId(postId);
                 relation.setResourceId(videoAsset.getResourceId());
                 relation.setSortOrder(i + 1);
@@ -114,17 +120,26 @@ public class ContentServiceImpl implements ContentService {
     }
 
     @Override
-    public String getVideoPlayUrl(Long postId) throws Exception {
-        // TODO: 这里应该根据 postId 找到合适的视频资源，然后返回播放链接，暂时使用固定资源
-        return minioService.getPresignedGetUrl("post/video/test-long.mp4");
+    public ContentPostDTO getPost(Long postId) throws Exception {
+        ContentPostDBO contentPostDBO = postMapper.selectById(postId);
+        LambdaQueryWrapper<ContentPostResourceDBO> resourceListWrapper = new LambdaQueryWrapper<>();
+        resourceListWrapper.eq(ContentPostResourceDBO::getPostId, postId);
+        List<ContentResourceDTO> resourceDTOList = postMapper.selectResourceList(postId);
+        for(ContentResourceDTO resourceDTO: resourceDTOList){
+            resourceDTO.setFileUrl(minioService.getPresignedGetUrl(resourceDTO.getFileKey()));
+        }
+        ContentPostDTO contentPostDTO = postStructMapper.fromPostDBO(contentPostDBO);
+        contentPostDTO.setCoverUrl(minioService.getPresignedGetUrl(contentPostDTO.getCoverKey()));
+        contentPostDTO.setResourceList(resourceDTOList);
+        return contentPostDTO;
     }
 
     /**
-     * 辅助方法：构建 ContentResource
+     * 辅助方法：构建 ContentResourceDBO
      */
-    private ContentResource buildContentAsset(MultipartFile file, String fileKey,
-                                              Integer assetType, String title, Long ownerId) {
-        ContentResource asset = new ContentResource();
+    private ContentResourceDBO buildContentAsset(MultipartFile file, String fileKey,
+                                                 Integer assetType, String title, Long ownerId) {
+        ContentResourceDBO asset = new ContentResourceDBO();
         asset.setResourceType(assetType);
         asset.setTitle(title);
         asset.setDescription("");
