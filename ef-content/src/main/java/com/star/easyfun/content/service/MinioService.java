@@ -46,6 +46,10 @@ public class MinioService {
     }
 
     // 2. 获取预签名下载URL
+    public String getPresignedGetUrl(String objectName) throws Exception {
+        return getPresignedGetUrl(objectName, minioProperty.getExpirySeconds());
+    }
+
     public String getPresignedGetUrl(String objectName, int expirySeconds) throws Exception {
         return minioClient.getPresignedObjectUrl(
                 GetPresignedObjectUrlArgs.builder()

@@ -20,8 +20,8 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @Accessors(chain = true)
-@TableName("content_asset")
-public class ContentAsset implements Serializable {
+@TableName("content_resource")
+public class ContentResource implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
@@ -29,11 +29,11 @@ public class ContentAsset implements Serializable {
      * 内容的唯一标识，自增主键
      */
     @TableId
-	private Long assetId;
+	private Long resourceId;
     /**
      * 内容类型：1=视频，2=图片，3=音频，4=文本，5=其他
      */
-    private Integer assetType;
+    private Integer resourceType;
     /**
      * 内容的标题
      */

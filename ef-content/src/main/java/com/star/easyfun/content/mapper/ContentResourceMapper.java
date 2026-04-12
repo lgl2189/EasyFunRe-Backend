@@ -1,7 +1,7 @@
 package com.star.easyfun.content.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.star.easyfun.content.pojo.dbo.ContentAsset;
+import com.star.easyfun.content.pojo.dbo.ContentResource;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
@@ -12,6 +12,6 @@ import org.apache.ibatis.annotations.Mapper;
  * @description 
 */
 @Mapper
-public interface ContentAssetMapper extends BaseMapper<ContentAsset> {
+public interface ContentResourceMapper extends BaseMapper<ContentResource> {
 
 }

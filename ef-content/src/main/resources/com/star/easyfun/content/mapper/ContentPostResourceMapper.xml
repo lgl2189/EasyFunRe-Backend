@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.star.easyfun.content.mapper.ContentPostAssetsMapper">
+<mapper namespace="com.star.easyfun.content.mapper.ContentPostResourceMapper">
     <sql id="tableName">
-        content_post_assets
+        content_post_resource
     </sql>
 
     <sql id="baseColumn">
-        post_assets_id,post_id,asset_id,sort_order,created_datetime,updated_datetime
+        post_resource_id,post_id,resource_id,sort_order,created_datetime,updated_datetime
     </sql>
 
 </mapper>

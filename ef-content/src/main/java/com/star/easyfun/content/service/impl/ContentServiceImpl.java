@@ -1,12 +1,12 @@
 package com.star.easyfun.content.service.impl;
 
 import com.star.easyfun.content.constant.PostConstant;
-import com.star.easyfun.content.mapper.ContentAssetMapper;
-import com.star.easyfun.content.mapper.ContentPostAssetsMapper;
 import com.star.easyfun.content.mapper.ContentPostMapper;
-import com.star.easyfun.content.pojo.dbo.ContentAsset;
+import com.star.easyfun.content.mapper.ContentPostResourceMapper;
+import com.star.easyfun.content.mapper.ContentResourceMapper;
 import com.star.easyfun.content.pojo.dbo.ContentPost;
-import com.star.easyfun.content.pojo.dbo.ContentPostAssets;
+import com.star.easyfun.content.pojo.dbo.ContentPostResource;
+import com.star.easyfun.content.pojo.dbo.ContentResource;
 import com.star.easyfun.content.pojo.dto.VideoPostDTO;
 import com.star.easyfun.content.service.ContentService;
 import com.star.easyfun.content.service.MinioService;
@@ -30,8 +30,8 @@ public class ContentServiceImpl implements ContentService {
 
     private final MinioService minioService;
     private final ContentPostMapper postMapper;
-    private final ContentAssetMapper assetMapper;
-    private final ContentPostAssetsMapper postAssetsMapper;
+    private final ContentResourceMapper resourceMapper;
+    private final ContentPostResourceMapper postResourceMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -62,9 +62,9 @@ public class ContentServiceImpl implements ContentService {
                 coverKey = minioService.upload(coverFile, PostConstant.UPLOAD_POST_COVER_FOLDER);
 
                 // 保存封面到 content_asset
-                ContentAsset coverAsset = buildContentAsset(coverFile, coverKey, 2, // 2=图片
+                ContentResource coverAsset = buildContentAsset(coverFile, coverKey, 2, // 2=图片
                         dto.getPostTitle() + " 封面", ownerId);
-                assetMapper.insert(coverAsset);
+                resourceMapper.insert(coverAsset);
 
                 // 更新 post 的 coverUrl
                 post.setCoverKey(coverKey);
@@ -90,19 +90,19 @@ public class ContentServiceImpl implements ContentService {
                 String videoKey = minioService.upload(videoFile, PostConstant.UPLOAD_POST_VIDEO_FOLDER);
 
                 // 保存视频到 content_asset
-                ContentAsset videoAsset = buildContentAsset(videoFile, videoKey, 1, // 1=视频
+                ContentResource videoAsset = buildContentAsset(videoFile, videoKey, 1, // 1=视频
                         videoTitle, ownerId);
                 // 可选：这里可以调用 FFmpeg 获取时长 duration（后面再加）
-                assetMapper.insert(videoAsset);
+                resourceMapper.insert(videoAsset);
 
                 // 建立投稿与资源的关联
-                ContentPostAssets relation = new ContentPostAssets();
+                ContentPostResource relation = new ContentPostResource();
                 relation.setPostId(postId);
-                relation.setAssetId(videoAsset.getAssetId());
+                relation.setResourceId(videoAsset.getResourceId());
                 relation.setSortOrder(i + 1);
                 relation.setCreatedDatetime(LocalDateTime.now());
                 relation.setUpdatedDatetime(LocalDateTime.now());
-                postAssetsMapper.insert(relation);
+                postResourceMapper.insert(relation);
 
             }
             catch (Exception e) {
@@ -113,13 +113,19 @@ public class ContentServiceImpl implements ContentService {
         return postId;
     }
 
+    @Override
+    public String getVideoPlayUrl(Long postId) throws Exception {
+        // TODO: 这里应该根据 postId 找到合适的视频资源，然后返回播放链接，暂时使用固定资源
+        return minioService.getPresignedGetUrl("post/video/test-long.mp4");
+    }
+
     /**
-     * 辅助方法：构建 ContentAsset
+     * 辅助方法：构建 ContentResource
      */
-    private ContentAsset buildContentAsset(MultipartFile file, String fileKey,
-                                           Integer assetType, String title, Long ownerId) {
-        ContentAsset asset = new ContentAsset();
-        asset.setAssetType(assetType);
+    private ContentResource buildContentAsset(MultipartFile file, String fileKey,
+                                              Integer assetType, String title, Long ownerId) {
+        ContentResource asset = new ContentResource();
+        asset.setResourceType(assetType);
         asset.setTitle(title);
         asset.setDescription("");
         asset.setFileKey(fileKey);

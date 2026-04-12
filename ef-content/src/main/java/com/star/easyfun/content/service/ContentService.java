@@ -15,4 +15,11 @@ public interface ContentService {
      * @return 新生成的 postId
      */
     Long uploadVideoPost(VideoPostDTO dto, Long ownerId);
+
+    /**
+     * 获取视频投稿的播放地址
+     * @param postId 投稿id
+     * @return 播放地址
+     */
+    String getVideoPlayUrl(Long postId) throws Exception;
 }
