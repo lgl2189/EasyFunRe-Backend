@@ -1,13 +1,14 @@
 package com.star.easyfun.content.pojo.dbo;
 
-import java.io.Serial;
-import java.io.Serializable;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
+
+import java.io.Serial;
+import java.io.Serializable;
 
 /**
  * 存储用户与投稿内容进行的互动记录(content_interaction_record)实体类
@@ -41,6 +42,6 @@ public class ContentInteractionRecordDBO implements Serializable {
     /**
      * 用户是否进行点赞操作
      */
-    private Integer like;
+    private Integer isLike;
 
 }

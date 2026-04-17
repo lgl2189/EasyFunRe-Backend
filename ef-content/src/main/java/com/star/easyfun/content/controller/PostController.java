@@ -5,6 +5,7 @@ import com.star.easyfun.common.pojo.dto.Result;
 import com.star.easyfun.common.util.ResultUtil;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
 import com.star.easyfun.content.pojo.dto.VideoPostUploadDTO;
+import com.star.easyfun.content.service.BehaviorRecordAsyncService;
 import com.star.easyfun.content.service.ContentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class PostController {
     private final ContentService contentService;
+    private final BehaviorRecordAsyncService behaviorRecordAsyncService;
 
     @PostMapping("/video")
     public Result uploadPost(VideoPostUploadDTO videoPostUploadDTO, @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId) {
@@ -35,5 +37,18 @@ public class PostController {
         // TODO: 这个接口根据资源id
         ContentPostDTO contentPostDTO = contentService.getPost(postId);
         return ResultUtil.success_10000(contentPostDTO, "测试视频投稿");
+    }
+
+    @PostMapping("/{postId}/like")
+    public Result likePost(@PathVariable("postId") Long postId, @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
+                           @RequestParam("isLike") Boolean isLike) {
+        boolean isSuccess = contentService.updatePostLike(postId, userId, isLike);
+        if (!isSuccess) {
+            if(isLike){
+                return ResultUtil.fail_20000("点赞失败，当前已为点赞状态");
+            }
+            return ResultUtil.fail_20000("取消点赞失败，当前已为未点赞状态");
+        }
+        return ResultUtil.success_10000(null, "点赞成功");
     }
 }

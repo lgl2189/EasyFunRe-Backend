@@ -23,4 +23,13 @@ public interface ContentService {
      * @return 投稿信息
      */
     ContentPostDTO getPost(Long postId) throws Exception;
+
+    /**
+     * 用户点赞或取消点赞
+     * @param postId 投稿id
+     * @param userId 用户id
+     * @param isLike 点赞或取消点赞，true 点赞，false 取消点赞
+     * @return 是否成功
+     */
+    boolean updatePostLike(Long postId, Long userId, boolean isLike);
 }

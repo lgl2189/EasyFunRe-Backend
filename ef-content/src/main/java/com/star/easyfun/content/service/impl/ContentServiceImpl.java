@@ -1,10 +1,13 @@
 package com.star.easyfun.content.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.star.easyfun.content.constant.PostConstant;
+import com.star.easyfun.content.mapper.ContentInteractionRecordMapper;
 import com.star.easyfun.content.mapper.ContentPostMapper;
 import com.star.easyfun.content.mapper.ContentPostResourceMapper;
 import com.star.easyfun.content.mapper.ContentResourceMapper;
+import com.star.easyfun.content.pojo.dbo.ContentInteractionRecordDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostResourceDBO;
 import com.star.easyfun.content.pojo.dbo.ContentResourceDBO;
@@ -36,6 +39,7 @@ public class ContentServiceImpl implements ContentService {
     private final ContentPostMapper postMapper;
     private final ContentResourceMapper resourceMapper;
     private final ContentPostResourceMapper postResourceMapper;
+    private final ContentInteractionRecordMapper interactionRecordMapper;
 
     private final PostStructMapper postStructMapper;
 
@@ -126,7 +130,7 @@ public class ContentServiceImpl implements ContentService {
         LambdaQueryWrapper<ContentPostResourceDBO> resourceListWrapper = new LambdaQueryWrapper<>();
         resourceListWrapper.eq(ContentPostResourceDBO::getPostId, postId);
         List<ContentResourceDTO> resourceDTOList = postMapper.selectResourceList(postId);
-        for(ContentResourceDTO resourceDTO: resourceDTOList){
+        for (ContentResourceDTO resourceDTO : resourceDTOList) {
             resourceDTO.setFileUrl(minioService.getPresignedGetUrl(resourceDTO.getFileKey()));
         }
         ContentPostDTO contentPostDTO = postStructMapper.fromPostDBO(contentPostDBO);
@@ -152,5 +156,40 @@ public class ContentServiceImpl implements ContentService {
         asset.setCreatedDatetime(LocalDateTime.now());
         asset.setUpdatedDatetime(LocalDateTime.now());
         return asset;
+    }
+
+    @Override
+    @Transactional
+    public boolean updatePostLike(Long postId, Long userId, boolean isLike) {
+        //TODO: 之后改为先更新到Redis，使用消息队列异步更新到MySQL
+        // 先检查当前是否可以点赞、取消点赞
+        LambdaQueryWrapper<ContentInteractionRecordDBO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId)
+                .eq(ContentInteractionRecordDBO::getOwnerId, userId);
+        ContentInteractionRecordDBO interactionRecordDBO = interactionRecordMapper.selectOne(wrapper);
+        Integer newLike = isLike ? 1 : 0;
+        if (interactionRecordDBO != null && interactionRecordDBO.getIsLike().equals(newLike)) {
+            return false;
+        }
+        // 更新点赞记录
+        if (interactionRecordDBO == null) {
+            interactionRecordDBO = new ContentInteractionRecordDBO();
+            interactionRecordDBO.setOwnerId(userId);
+            interactionRecordDBO.setTargetPostId(postId);
+            interactionRecordDBO.setIsLike(newLike);
+            interactionRecordMapper.insert(interactionRecordDBO);
+        }
+        else {
+            interactionRecordDBO.setIsLike(newLike);
+            interactionRecordMapper.updateById(interactionRecordDBO);
+        }
+        // 更新点赞计数
+        ContentPostDBO newPost = postMapper.selectById(postId);
+        newPost.setPostId(postId);
+        LambdaUpdateWrapper<ContentPostDBO> postWrapper = new LambdaUpdateWrapper<>();
+        postWrapper.eq(ContentPostDBO::getPostId, postId)
+                .setSql("like_count = like_count " + (isLike ? "+1" : "-1"));
+        postMapper.update(postWrapper);
+        return true;
     }
 }
