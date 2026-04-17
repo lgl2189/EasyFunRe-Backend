@@ -41,4 +41,13 @@ public interface ContentService {
      * @return 是否成功
      */
     boolean updatePostLike(Long postId, Long userId, boolean isLike);
+
+    /**
+     * 用户点踩或取消点踩
+     * @param postId 投稿id
+     * @param userId 用户id
+     * @param isDislike 点踩或取消点踩，true 点踩，false 取消点踩
+     * @return 是否成功
+     */
+    boolean updatePostDislike(Long postId, Long userId, boolean isDislike);
 }

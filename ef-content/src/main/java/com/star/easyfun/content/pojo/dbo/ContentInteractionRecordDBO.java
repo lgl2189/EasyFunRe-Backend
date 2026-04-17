@@ -43,5 +43,9 @@ public class ContentInteractionRecordDBO implements Serializable {
      * 用户是否进行点赞操作
      */
     private Integer isLike;
+    /**
+     * 用户是否进行点踩操作
+     */
+    private Integer isDislike;
 
 }

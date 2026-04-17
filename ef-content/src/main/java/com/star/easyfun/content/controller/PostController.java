@@ -42,6 +42,7 @@ public class PostController {
         return ResultUtil.success_10000(contentPostDTO, "测试视频投稿");
     }
 
+    // 如果已经点踩，则在点赞或取消点赞时，都会取消点踩
     @PostMapping("/{postId}/like")
     public Result likePost(@PathVariable("postId") Long postId,
                            @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
@@ -53,6 +54,27 @@ public class PostController {
             }
             return ResultUtil.fail_20000("取消点赞失败，当前已为未点赞状态");
         }
+        if(!isLike){
+            return ResultUtil.success_10000(null, "取消点赞成功");
+        }
         return ResultUtil.success_10000(null, "点赞成功");
+    }
+
+    // 如果已经点赞，则在点踩或取消点踩时，都会取消点赞
+    @PostMapping("/{postId}/dislike")
+    public Result dislikePost(@PathVariable("postId") Long postId,
+                           @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
+                           @RequestParam("isDislike") Boolean isDislike) {
+        boolean isSuccess = contentService.updatePostDislike(postId, userId, isDislike);
+        if (!isSuccess) {
+            if (isDislike) {
+                return ResultUtil.fail_20000("点踩失败，当前已为点踩状态");
+            }
+            return ResultUtil.fail_20000("取消点踩失败，当前已为未点踩状态");
+        }
+        if(!isDislike){
+            return ResultUtil.success_10000(null, "取消点踩成功");
+        }
+        return ResultUtil.success_10000(null, "点踩成功");
     }
 }

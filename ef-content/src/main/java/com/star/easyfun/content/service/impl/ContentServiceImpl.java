@@ -162,7 +162,7 @@ public class ContentServiceImpl implements ContentService {
         LambdaQueryWrapper<ContentInteractionRecordDBO> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId);
         queryWrapper.eq(ContentInteractionRecordDBO::getOwnerId, userId);
-        if(interactionRecordMapper.selectOne(queryWrapper) == null){
+        if (interactionRecordMapper.selectOne(queryWrapper) == null) {
             ContentInteractionRecordDBO newRecord = new ContentInteractionRecordDBO()
                     .setTargetPostId(postId)
                     .setOwnerId(userId)
@@ -198,7 +198,6 @@ public class ContentServiceImpl implements ContentService {
     @Override
     @Transactional
     public boolean updatePostLike(Long postId, Long userId, boolean isLike) {
-        //TODO: 之后改为先更新到Redis，使用消息队列异步更新到MySQL
         // 先检查当前是否可以点赞、取消点赞
         LambdaQueryWrapper<ContentInteractionRecordDBO> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId)
@@ -210,14 +209,23 @@ public class ContentServiceImpl implements ContentService {
         }
         // 更新点赞记录
         if (interactionRecordDBO == null) {
+            // 如果没有记录还要取消点赞，则不允许
+            if (!isLike) {
+                return false;
+            }
             interactionRecordDBO = new ContentInteractionRecordDBO();
             interactionRecordDBO.setOwnerId(userId);
             interactionRecordDBO.setTargetPostId(postId);
             interactionRecordDBO.setIsLike(newLike);
+            interactionRecordDBO.setIsDislike(0);        // 默认未点踩
             interactionRecordMapper.insert(interactionRecordDBO);
         }
         else {
             interactionRecordDBO.setIsLike(newLike);
+            // 如果已经点踩，则更新为未点踩
+            if (isLike && interactionRecordDBO.getIsDislike() == 1) {
+                interactionRecordDBO.setIsDislike(0);
+            }
             interactionRecordMapper.updateById(interactionRecordDBO);
         }
         // 更新点赞计数
@@ -227,6 +235,48 @@ public class ContentServiceImpl implements ContentService {
         postWrapper.eq(ContentPostDBO::getPostId, postId)
                 .setSql("like_count = like_count " + (isLike ? "+1" : "-1"));
         postMapper.update(postWrapper);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean updatePostDislike(Long postId, Long userId, boolean isDislike) {
+        // 先检查当前是否可以点踩、取消点踩
+        LambdaQueryWrapper<ContentInteractionRecordDBO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId)
+                .eq(ContentInteractionRecordDBO::getOwnerId, userId);
+        ContentInteractionRecordDBO interactionRecordDBO = interactionRecordMapper.selectOne(wrapper);
+
+        Integer newDislike = isDislike ? 1 : 0;
+        if (interactionRecordDBO != null && interactionRecordDBO.getIsDislike().equals(newDislike)) {
+            return false;
+        }
+        // 更新点踩记录
+        if (interactionRecordDBO == null) {
+            // 如果没有记录还要取消点踩，则不允许
+            if (!isDislike) {
+                return false;
+            }
+            interactionRecordDBO = new ContentInteractionRecordDBO();
+            interactionRecordDBO.setOwnerId(userId);
+            interactionRecordDBO.setTargetPostId(postId);
+            interactionRecordDBO.setIsLike(0);        // 默认未点赞
+            interactionRecordDBO.setIsDislike(newDislike);
+            interactionRecordMapper.insert(interactionRecordDBO);
+        }
+        else {
+            interactionRecordDBO.setIsDislike(newDislike);
+            // 如果之前点过赞，则取消点赞（互斥逻辑）
+            if (isDislike && interactionRecordDBO.getIsLike() == 1) {
+                interactionRecordDBO.setIsLike(0);
+                LambdaUpdateWrapper<ContentPostDBO> postWrapper = new LambdaUpdateWrapper<>();
+                postWrapper.eq(ContentPostDBO::getPostId, postId)
+                        .setSql("like_count = like_count - 1");
+                postMapper.update(postWrapper);
+            }
+
+            interactionRecordMapper.updateById(interactionRecordDBO);
+        }
         return true;
     }
 }
