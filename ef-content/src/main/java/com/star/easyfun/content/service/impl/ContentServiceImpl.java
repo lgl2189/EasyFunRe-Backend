@@ -58,6 +58,7 @@ public class ContentServiceImpl implements ContentService {
         post.setCommentCount(0);
         post.setCommentAreaId(0L);
         post.setCreatedAt(LocalDateTime.now());
+        post.setPublishedAt(LocalDateTime.now());
         post.setUpdatedDatetime(LocalDateTime.now());
 
         // 2. 处理封面（取第一个）
