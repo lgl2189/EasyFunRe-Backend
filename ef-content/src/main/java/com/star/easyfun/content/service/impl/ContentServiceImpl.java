@@ -3,6 +3,7 @@ package com.star.easyfun.content.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.star.easyfun.content.constant.PostConstant;
+import com.star.easyfun.content.constant.RedisKeyConstant;
 import com.star.easyfun.content.mapper.ContentInteractionRecordMapper;
 import com.star.easyfun.content.mapper.ContentPostMapper;
 import com.star.easyfun.content.mapper.ContentPostResourceMapper;
@@ -18,12 +19,14 @@ import com.star.easyfun.content.pojo.mapper.PostStructMapper;
 import com.star.easyfun.content.service.ContentService;
 import com.star.easyfun.content.service.MinioService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author ：Star
@@ -42,6 +45,8 @@ public class ContentServiceImpl implements ContentService {
     private final ContentInteractionRecordMapper interactionRecordMapper;
 
     private final PostStructMapper postStructMapper;
+
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -126,6 +131,7 @@ public class ContentServiceImpl implements ContentService {
 
     @Override
     public ContentPostDTO getPost(Long postId) throws Exception {
+        // 获取投稿内容
         ContentPostDBO contentPostDBO = postMapper.selectById(postId);
         LambdaQueryWrapper<ContentPostResourceDBO> resourceListWrapper = new LambdaQueryWrapper<>();
         resourceListWrapper.eq(ContentPostResourceDBO::getPostId, postId);
@@ -137,6 +143,37 @@ public class ContentServiceImpl implements ContentService {
         contentPostDTO.setCoverUrl(minioService.getPresignedGetUrl(contentPostDTO.getCoverKey()));
         contentPostDTO.setResourceList(resourceDTOList);
         return contentPostDTO;
+    }
+
+    @Override
+    public boolean recordBrowsePost(Long postId, Long userId) {
+        // Redis记录浏览。一天自动过期，即每天播放量只能统计一次
+        String key = RedisKeyConstant.getContentCachePostBrowseKey(postId, userId);
+        if (redisTemplate.opsForValue().get(key) != null) {
+            return false;
+        }
+        redisTemplate.opsForValue().set(key, "1", 1, TimeUnit.DAYS);
+        // 添加浏览记录
+        ContentPostDBO post = postMapper.selectById(postId);
+        if (post == null) {
+            return false;
+        }
+        // 稿件存在
+        LambdaQueryWrapper<ContentInteractionRecordDBO> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId);
+        queryWrapper.eq(ContentInteractionRecordDBO::getOwnerId, userId);
+        if(interactionRecordMapper.selectOne(queryWrapper) == null){
+            ContentInteractionRecordDBO newRecord = new ContentInteractionRecordDBO()
+                    .setTargetPostId(postId)
+                    .setOwnerId(userId)
+                    .setIsLike(0);
+            interactionRecordMapper.insert(newRecord);
+        }
+        LambdaUpdateWrapper<ContentPostDBO> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(ContentPostDBO::getPostId, postId)
+                .setSql("view_count = view_count + 1");
+        postMapper.update(updateWrapper);
+        return true;
     }
 
     /**

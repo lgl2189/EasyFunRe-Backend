@@ -33,18 +33,22 @@ public class PostController {
     // 不写路径默认为（""），如果写为 "/"，则表示路径末尾必须带 斜杠/，即/content/post/，不带斜杠无法匹配到该接口
     // 不能删除@PathVariable注解的"postId"参数，高版本SpringBoot未开启-parameter时，无法获取参数名，导致路径无法匹配，最终找不到匹配的接口
     @GetMapping("/{postId}")
-    public Result getPost(@PathVariable("postId") Long postId) throws Exception {
+    public Result getPost(@PathVariable("postId") Long postId,
+                          @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId
+    ) throws Exception {
         // TODO: 这个接口根据资源id
         ContentPostDTO contentPostDTO = contentService.getPost(postId);
+        contentService.recordBrowsePost(postId, userId);
         return ResultUtil.success_10000(contentPostDTO, "测试视频投稿");
     }
 
     @PostMapping("/{postId}/like")
-    public Result likePost(@PathVariable("postId") Long postId, @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
+    public Result likePost(@PathVariable("postId") Long postId,
+                           @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
                            @RequestParam("isLike") Boolean isLike) {
         boolean isSuccess = contentService.updatePostLike(postId, userId, isLike);
         if (!isSuccess) {
-            if(isLike){
+            if (isLike) {
                 return ResultUtil.fail_20000("点赞失败，当前已为点赞状态");
             }
             return ResultUtil.fail_20000("取消点赞失败，当前已为未点赞状态");

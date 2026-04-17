@@ -25,6 +25,15 @@ public interface ContentService {
     ContentPostDTO getPost(Long postId) throws Exception;
 
     /**
+     * 记录用户浏览投稿
+     *
+     * @param postId 投稿id
+     * @param userId 用户id
+     * @return 是否成功
+     */
+    boolean recordBrowsePost(Long postId, Long userId);
+
+    /**
      * 用户点赞或取消点赞
      * @param postId 投稿id
      * @param userId 用户id
