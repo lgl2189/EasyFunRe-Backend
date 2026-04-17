@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.star.easyfun.content.mapper.CommentInfoMapper">
+    <sql id="tableName">
+        comment_info
+    </sql>
+
+    <sql id="baseColumn">
+        comment_id,comment_area_id,root_id,parent_id,level,user_id,to_user_id,content,like_count,reply_count,is_top,created_at,is_delete
+    </sql>
+
+</mapper>
