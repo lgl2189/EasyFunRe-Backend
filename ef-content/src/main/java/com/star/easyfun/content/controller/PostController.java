@@ -10,6 +10,8 @@ import com.star.easyfun.content.service.ContentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * @author ：Star
  * @description ：所有与投稿有关的接口
@@ -36,8 +38,7 @@ public class PostController {
     public Result getPost(@PathVariable("postId") Long postId,
                           @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId
     ) throws Exception {
-        // TODO: 这个接口根据资源id
-        ContentPostDTO contentPostDTO = contentService.getPost(postId);
+        ContentPostDTO contentPostDTO = contentService.getPost(postId, userId);
         contentService.recordBrowsePost(postId, userId);
         return ResultUtil.success_10000(contentPostDTO, "测试视频投稿");
     }
@@ -54,7 +55,7 @@ public class PostController {
             }
             return ResultUtil.fail_20000("取消点赞失败，当前已为未点赞状态");
         }
-        if(!isLike){
+        if (!isLike) {
             return ResultUtil.success_10000(null, "取消点赞成功");
         }
         return ResultUtil.success_10000(null, "点赞成功");
@@ -63,8 +64,8 @@ public class PostController {
     // 如果已经点赞，则在点踩或取消点踩时，都会取消点赞
     @PostMapping("/{postId}/dislike")
     public Result dislikePost(@PathVariable("postId") Long postId,
-                           @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
-                           @RequestParam("isDislike") Boolean isDislike) {
+                              @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
+                              @RequestParam("isDislike") Boolean isDislike) {
         boolean isSuccess = contentService.updatePostDislike(postId, userId, isDislike);
         if (!isSuccess) {
             if (isDislike) {
@@ -72,9 +73,22 @@ public class PostController {
             }
             return ResultUtil.fail_20000("取消点踩失败，当前已为未点踩状态");
         }
-        if(!isDislike){
+        if (!isDislike) {
             return ResultUtil.success_10000(null, "取消点踩成功");
         }
         return ResultUtil.success_10000(null, "点踩成功");
+    }
+
+    @GetMapping("/search")
+    public Result searchPost(@RequestParam("keyword") List<String> keywordList,
+                             @RequestParam("pageNum") Integer pageNum,
+                             @RequestParam("pageSize") Integer pageSize) {
+        return ResultUtil.success_10000(null, "搜索结果分页列表获取成功");
+    }
+
+    @GetMapping("/recommend/list")
+    public Result recommendPostList(@RequestParam("pageSize") Integer pageSize,
+                                    @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId) {
+        return ResultUtil.success_10000(null, "推荐列表获得成功");
     }
 }

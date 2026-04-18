@@ -130,7 +130,7 @@ public class ContentServiceImpl implements ContentService {
     }
 
     @Override
-    public ContentPostDTO getPost(Long postId) throws Exception {
+    public ContentPostDTO getPost(Long postId, Long userId) throws Exception {
         // 获取投稿内容
         ContentPostDBO contentPostDBO = postMapper.selectById(postId);
         LambdaQueryWrapper<ContentPostResourceDBO> resourceListWrapper = new LambdaQueryWrapper<>();
@@ -142,6 +142,12 @@ public class ContentServiceImpl implements ContentService {
         ContentPostDTO contentPostDTO = postStructMapper.fromPostDBO(contentPostDBO);
         contentPostDTO.setCoverUrl(minioService.getPresignedGetUrl(contentPostDTO.getCoverKey()));
         contentPostDTO.setResourceList(resourceDTOList);
+        LambdaQueryWrapper<ContentInteractionRecordDBO> interactionQueryWrapper = new LambdaQueryWrapper<>();
+        interactionQueryWrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId);
+        interactionQueryWrapper.eq(ContentInteractionRecordDBO::getOwnerId, userId);
+        ContentInteractionRecordDBO interactionRecordDBO = interactionRecordMapper.selectOne(interactionQueryWrapper);
+        contentPostDTO.setIsLike(interactionRecordDBO.getIsLike());
+        contentPostDTO.setIsDislike(interactionRecordDBO.getIsDislike());
         return contentPostDTO;
     }
 

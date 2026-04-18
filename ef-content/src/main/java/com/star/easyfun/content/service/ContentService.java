@@ -19,10 +19,12 @@ public interface ContentService {
 
     /**
      * 获取投稿的所有信息
+     *
      * @param postId 投稿id
+     * @param userId 用户id
      * @return 投稿信息
      */
-    ContentPostDTO getPost(Long postId) throws Exception;
+    ContentPostDTO getPost(Long postId, Long userId) throws Exception;
 
     /**
      * 记录用户浏览投稿

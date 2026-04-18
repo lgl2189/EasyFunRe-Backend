@@ -65,6 +65,14 @@ public class ContentPostDTO {
      */
     private Integer likeCount;
     /**
+     * 是否已点赞，1=已点赞，0=未点赞
+     */
+    private Integer isLike;
+    /**
+     * 是否已不喜欢，1=已不喜欢，0=未不喜欢
+     */
+    private Integer isDislike;
+    /**
      * 评论数量
      */
     private Integer commentCount;
