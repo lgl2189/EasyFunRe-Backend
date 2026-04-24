@@ -1,7 +1,0 @@
-nacos:
-  server_addr: 192.168.150.105:8848
-  namespace: easyfun_dev
-  data_id: ef-recommend.yaml
-  group: DEFAULT_GROUP
-  username: nacos
-  password: 12345678

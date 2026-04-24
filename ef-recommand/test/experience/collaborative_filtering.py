@@ -40,7 +40,7 @@ class BPR_MF:
         user_pos_items = {}
         all_items = set(range(n_items))
         for uid in range(n_users):
-            pos = positive_inter[positive_inter['user_id'] == uid]['video_id'].unique()
+            pos = positive_inter[positive_inter['user_id'] == uid]['post_id'].unique()
             user_pos_items[uid] = set(pos)
 
         # 初始化（优化尺度，提升区分度）
@@ -121,7 +121,7 @@ class BPR_MF:
 
 
 # ====================== 模拟数据生成 ======================
-def generate_improved_simulation_data(n_users=400, n_videos=1500, seed=42):
+def generate_improved_simulation_data(n_users=400, n_posts=1500, seed=42):
     """改进版模拟数据"""
     np.random.seed(seed)
     n_clusters = 4
@@ -130,8 +130,8 @@ def generate_improved_simulation_data(n_users=400, n_videos=1500, seed=42):
     if len(user_cluster) < n_users:
         user_cluster = np.concatenate([user_cluster, np.zeros(n_users - len(user_cluster), dtype=int)])
 
-    video_popularity = np.random.zipf(2.0, n_videos)
-    video_cluster = np.random.randint(0, n_clusters, n_videos)
+    post_popularity = np.random.zipf(2.0, n_posts)
+    post_cluster = np.random.randint(0, n_clusters, n_posts)
 
     interactions = []
     for uid in range(n_users):
@@ -140,22 +140,22 @@ def generate_improved_simulation_data(n_users=400, n_videos=1500, seed=42):
         n_own = int(n_inter * 0.7)
         n_cross = n_inter - n_own
 
-        own_videos = np.where(video_cluster == cluster)[0]
-        cross_videos = np.where(video_cluster != cluster)[0]
+        own_posts = np.where(post_cluster == cluster)[0]
+        cross_posts = np.where(post_cluster != cluster)[0]
 
-        selected_own = np.random.choice(own_videos, min(n_own, len(own_videos)), replace=False)
-        selected_cross = np.random.choice(cross_videos, min(n_cross, len(cross_videos)), replace=False)
-        selected_videos = np.concatenate([selected_own, selected_cross])
+        selected_own = np.random.choice(own_posts, min(n_own, len(own_posts)), replace=False)
+        selected_cross = np.random.choice(cross_posts, min(n_cross, len(cross_posts)), replace=False)
+        selected_posts = np.concatenate([selected_own, selected_cross])
 
-        for vid in selected_videos:
+        for vid in selected_posts:
             if np.random.rand() < 0.25:
                 score = -np.random.uniform(1.0, 5.0)
             else:
                 base = np.random.uniform(1.8, 5.5)
-                score = base * (1 + 0.25 * (video_popularity[vid] / video_popularity.max()))
-            interactions.append({'user_id': uid, 'video_id': int(vid), 'score': round(score, 2)})
+                score = base * (1 + 0.25 * (post_popularity[vid] / post_popularity.max()))
+            interactions.append({'user_id': uid, 'post_id': int(vid), 'score': round(score, 2)})
 
-    return pd.DataFrame(interactions), n_users, n_videos
+    return pd.DataFrame(interactions), n_users, n_posts
 
 
 # ====================== 预测函数（重点优化区分度） ======================
@@ -169,7 +169,7 @@ def get_cf_scores(test_user_id: int, top_n: int = 10):
     u_bias = user_bias[test_user_id]
 
     scores = {}
-    for vid in range(n_videos):
+    for vid in range(n_posts):
         item_vec = item_factors[vid]
         i_bias = item_bias[vid]
         score = float(np.dot(user_vec, item_vec) + u_bias + i_bias + global_bias)
@@ -198,16 +198,16 @@ if __name__ == "__main__":
     print("正在生成改进版模拟数据...\n")
 
     # 推荐规模：用户400，视频1500，平衡效果与速度
-    df, n_users, n_videos = generate_improved_simulation_data(n_users=400, n_videos=1000, seed=42)
+    df, n_users, n_posts = generate_improved_simulation_data(n_users=400, n_posts=1000, seed=42)
 
-    print(f"模拟数据生成完成！用户: {n_users} | 视频: {n_videos} | 交互: {len(df)} 条")
+    print(f"模拟数据生成完成！用户: {n_users} | 视频: {n_posts} | 交互: {len(df)} 条")
     print(f"正反馈比例: {(df['score'] > 0).mean():.1%}\n")
 
     print("=== 开始 BPR 协同过滤训练 ===")
     bpr_model = BPR_MF(n_factors=64, lr=0.1, reg=0.0015, n_epochs=1000, n_neg=8)
 
     global user_factors, item_factors, user_bias, item_bias, global_bias
-    user_factors, item_factors, user_bias, item_bias, global_bias = bpr_model.fit(df, n_users, n_videos)
+    user_factors, item_factors, user_bias, item_bias, global_bias = bpr_model.fit(df, n_users, n_posts)
 
     print("\n" + "=" * 80)
     print("协同过滤推荐测试（来自不同兴趣簇的用户）：")

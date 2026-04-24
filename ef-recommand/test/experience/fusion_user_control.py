@@ -50,13 +50,13 @@ class HybridFusionService:
                            params: RecommendParam,
                            cf_scores: Dict[int, float],
                            content_scores: Dict[int, float],
-                           video_features: Dict[int, np.ndarray]) -> List[Dict[str, Any]]:
+                           post_features: Dict[int, np.ndarray]) -> List[Dict[str, Any]]:
         """
         核心对外接口：执行融合推荐
         :param params: 前端传来的可控参数
-        :param cf_scores: 模块1(CF) 算出的粗排分数 {video_id: score} (如 2.0~8.0)
-        :param content_scores: 模块2(内容) 算出的相似度 {video_id: score} (如 0.0~1.0)
-        :param video_features: 候选视频的底层特征向量 {video_id: numpy_array} (用于算MMR)
+        :param cf_scores: 模块1(CF) 算出的粗排分数 {post_id: score} (如 2.0~8.0)
+        :param content_scores: 模块2(内容) 算出的相似度 {post_id: score} (如 0.0~1.0)
+        :param post_features: 候选视频的底层特征向量 {post_id: numpy_array} (用于算MMR)
         :return: 最终排好序的视频字典列表
         """
         params.validate()
@@ -96,9 +96,9 @@ class HybridFusionService:
                 penalty = 0.0
                 if selected_list:
                     # 找到该视频与【已选中列表】里所有视频的最大相似度，作为惩罚项
-                    vec_current = video_features.get(vid, np.zeros(1))
+                    vec_current = post_features.get(vid, np.zeros(1))
                     penalty = max(
-                        self._cosine_similarity(vec_current, video_features.get(s['video_id'], np.zeros(1)))
+                        self._cosine_similarity(vec_current, post_features.get(s['post_id'], np.zeros(1)))
                         for s in selected_list
                     )
 
@@ -111,7 +111,7 @@ class HybridFusionService:
                     best_hybrid_score = h_score
 
             selected_list.append({
-                "video_id": best_vid,
+                "post_id": best_vid,
                 "final_score": round(best_mmr, 4),
                 "hybrid_score": round(best_hybrid_score, 4)
             })
@@ -131,8 +131,8 @@ def generate_mock_inputs():
 
     cf_scores = {}
     content_scores = {}
-    video_features = {}
-    video_meta = {}  # 仅用于打印对比
+    post_features = {}
+    post_meta = {}  # 仅用于打印对比
 
     np.random.seed(42)
 
@@ -140,12 +140,12 @@ def generate_mock_inputs():
     for vid in range(1, 51):
         cat_idx = vid % 5
         cat_name = categories[cat_idx]
-        video_meta[vid] = cat_name
+        post_meta[vid] = cat_name
 
         # 模拟视频向量 (one-hot 加上一些随机噪声)
         vec = np.random.normal(0.1, 0.05, 5)
         vec[cat_idx] += 1.0
-        video_features[vid] = vec / np.linalg.norm(vec)
+        post_features[vid] = vec / np.linalg.norm(vec)
 
         # 模拟：当前用户是一个深度的“科技”迷
         if cat_name == "科技":
@@ -158,7 +158,7 @@ def generate_mock_inputs():
             cf_scores[vid] = np.random.uniform(1.0, 3.0)  # 其他不感兴趣
             content_scores[vid] = np.random.uniform(0.0, 0.2)
 
-    return cf_scores, content_scores, video_features, video_meta
+    return cf_scores, content_scores, post_features, post_meta
 
 
 def print_result(title, result, meta_data):
@@ -167,7 +167,7 @@ def print_result(title, result, meta_data):
     print("-" * 60)
     cat_counts = {}
     for i, item in enumerate(result, 1):
-        vid = item['video_id']
+        vid = item['post_id']
         cat = meta_data[vid]
         cat_counts[cat] = cat_counts.get(cat, 0) + 1
         print(f" {i:2d}  | {vid:5d}  | {cat:4s} |  {item['final_score']:.4f}   |  {item['hybrid_score']:.4f}")

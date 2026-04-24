@@ -17,9 +17,9 @@ class ColdStartService:
 
         self.user_interaction_count = {}
         self.user_tag_vectors = {}
-        self.video_vectors = {}
-        self.video_category = {}
-        self.video_popularity = {}
+        self.post_vectors = {}
+        self.post_category = {}
+        self.post_popularity = {}
 
         self._init_mock_data()
 
@@ -29,17 +29,17 @@ class ColdStartService:
             vec /= (np.linalg.norm(vec) + 1e-8)
 
             if random.random() < 0.35:
-                self.video_category[vid] = "tech"
+                self.post_category[vid] = "tech"
                 active = random.sample(range(self.vector_dim), 18)
                 vec[active] *= 2.2
                 vec /= (np.linalg.norm(vec) + 1e-8)
             else:
-                self.video_category[vid] = "other"
+                self.post_category[vid] = "other"
 
-            self.video_vectors[vid] = vec
-            self.video_popularity[vid] = random.betavariate(2, 5)
+            self.post_vectors[vid] = vec
+            self.post_popularity[vid] = random.betavariate(2, 5)
 
-        print(f"模拟数据初始化完成：{len(self.video_vectors)} 个视频（约35%为科技/AI类）\n")
+        print(f"模拟数据初始化完成：{len(self.post_vectors)} 个视频（约35%为科技/AI类）\n")
 
     def register_user(self, user_id: int, interest_tags: List[str]):
         """新用户注册"""
@@ -66,28 +66,28 @@ class ColdStartService:
     def cosine_similarity(self, v1, v2):
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-8)
 
-    def dislike_video(self, user_id: int, video_id: int, strength: float = 0.75):
+    def dislike_post(self, user_id: int, post_id: int, strength: float = 0.75):
         """负反馈机制：用户不喜欢某个视频"""
-        if user_id not in self.user_tag_vectors or video_id not in self.video_vectors:
+        if user_id not in self.user_tag_vectors or post_id not in self.post_vectors:
             print(f"负反馈失败：用户或视频不存在")
             return
 
         user_vec = self.user_tag_vectors[user_id].copy()
-        video_vec = self.video_vectors[video_id]
+        post_vec = self.post_vectors[post_id]
 
-        sim = self.cosine_similarity(user_vec, video_vec)
+        sim = self.cosine_similarity(user_vec, post_vec)
 
         if sim < 0.12:
-            print(f"视频 {video_id} 相似度较低 ({sim:.4f})，负反馈影响较小")
+            print(f"视频 {post_id} 相似度较低 ({sim:.4f})，负反馈影响较小")
             return
 
         # 正确反向惩罚
-        adjustment = strength * sim * video_vec
+        adjustment = strength * sim * post_vec
         user_vec = user_vec - adjustment
         user_vec /= (np.linalg.norm(user_vec) + 1e-8)
 
         self.user_tag_vectors[user_id] = user_vec
-        print(f"✓ 已应用负反馈：不喜欢视频 {video_id} (相似度 {sim:.4f})，用户画像已更新")
+        print(f"✓ 已应用负反馈：不喜欢视频 {post_id} (相似度 {sim:.4f})，用户画像已更新")
 
     def recommend(self, user_id: int, top_n: int = 12) -> List[Dict]:
         """冷启动推荐主方法"""
@@ -102,9 +102,9 @@ class ColdStartService:
         user_vec = self.user_tag_vectors[user_id]
         scored = []
 
-        for vid, video_vec in self.video_vectors.items():
-            sim = self.cosine_similarity(user_vec, video_vec)
-            pop = self.video_popularity.get(vid, 0.3)
+        for vid, post_vec in self.post_vectors.items():
+            sim = self.cosine_similarity(user_vec, post_vec)
+            pop = self.post_popularity.get(vid, 0.3)
             final_score = 0.87 * sim + 0.13 * pop
 
             reason = "弱匹配"
@@ -113,11 +113,11 @@ class ColdStartService:
             elif sim > 0.25:
                 reason = "兴趣匹配"
 
-            if self.video_category.get(vid) == "tech" and sim > 0.25:
+            if self.post_category.get(vid) == "tech" and sim > 0.25:
                 reason += " (tech)"
 
             scored.append({
-                "video_id": vid,
+                "post_id": vid,
                 "score": round(final_score, 4),
                 "sim": round(sim, 4),
                 "reason": reason
@@ -127,8 +127,8 @@ class ColdStartService:
 
         # 兴趣驱动推荐为主 + 少量探索
         main_recs = scored[:max(10, top_n - 2)]
-        explore_list = self._get_explore_videos(num=top_n - len(main_recs),
-                                                exclude_ids=[x["video_id"] for x in main_recs])
+        explore_list = self._get_explore_posts(num=top_n - len(main_recs),
+                                               exclude_ids=[x["post_id"] for x in main_recs])
 
         for item in explore_list:
             item["score"] = round(item["score"] * 0.52, 4)
@@ -141,17 +141,17 @@ class ColdStartService:
         return final_list[:top_n]
 
     def _popular_recommendation(self, top_n: int = 12) -> List[Dict]:
-        popular = sorted(self.video_popularity.items(), key=lambda x: x[1], reverse=True)
-        return [{"video_id": vid, "score": round(score, 4), "sim": 0.0, "reason": "平台热门"}
+        popular = sorted(self.post_popularity.items(), key=lambda x: x[1], reverse=True)
+        return [{"post_id": vid, "score": round(score, 4), "sim": 0.0, "reason": "平台热门"}
                 for vid, score in popular[:top_n]]
 
-    def _get_explore_videos(self, num: int = 2, exclude_ids=None):
+    def _get_explore_posts(self, num: int = 2, exclude_ids=None):
         if exclude_ids is None:
             exclude_ids = []
-        candidates = [vid for vid in self.video_vectors if vid not in exclude_ids]
+        candidates = [vid for vid in self.post_vectors if vid not in exclude_ids]
         random.shuffle(candidates)
         return [{
-            "video_id": vid,
+            "post_id": vid,
             "score": round(random.uniform(0.48, 0.65), 4),
             "reason": "探索推荐"
         } for vid in candidates[:num]]
@@ -170,18 +170,18 @@ if __name__ == "__main__":
     rec = service.recommend(user_id, top_n=12)
     for i, item in enumerate(rec, 1):
         sim_str = f"sim={item['sim']:.4f}" if item.get('sim', 0) > 0 else "sim=-"
-        print(f"{i:2d}. 视频ID {item['video_id']:3d} | 分数 {item['score']:.4f} | {sim_str} | {item['reason']}")
+        print(f"{i:2d}. 视频ID {item['post_id']:3d} | 分数 {item['score']:.4f} | {sim_str} | {item['reason']}")
 
     print("\n" + "─" * 90)
     print("演示负反馈机制：")
-    service.dislike_video(user_id, video_id=12, strength=0.75)
-    service.dislike_video(user_id, video_id=39, strength=0.70)
+    service.dislike_post(user_id, post_id=12, strength=0.75)
+    service.dislike_post(user_id, post_id=39, strength=0.70)
 
     print("\n【负反馈后的推荐结果】")
     rec_after = service.recommend(user_id, top_n=12)
     for i, item in enumerate(rec_after, 1):
         sim_str = f"sim={item['sim']:.4f}" if item.get('sim', 0) > 0 else "sim=-"
-        print(f"{i:2d}. 视频ID {item['video_id']:3d} | 分数 {item['score']:.4f} | {sim_str} | {item['reason']}")
+        print(f"{i:2d}. 视频ID {item['post_id']:3d} | 分数 {item['score']:.4f} | {sim_str} | {item['reason']}")
 
     print("\n" + "═" * 90)
     print("继续模拟交互以退出冷启动...")
