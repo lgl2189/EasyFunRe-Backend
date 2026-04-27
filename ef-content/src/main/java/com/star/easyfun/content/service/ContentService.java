@@ -1,7 +1,10 @@
 package com.star.easyfun.content.service;
 
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
+import com.star.easyfun.content.pojo.dto.ContentPostListDTO;
 import com.star.easyfun.content.pojo.dto.VideoPostUploadDTO;
+
+import java.util.List;
 
 /**
  * @author ：Star
@@ -52,4 +55,13 @@ public interface ContentService {
      * @return 是否成功
      */
     boolean updatePostDislike(Long postId, Long userId, boolean isDislike);
+
+    /**
+     * 根据多个关键字，分页查询投稿列表
+     * @param keywordList 关键字列表
+     * @param pageNum 页码
+     * @param pageSize 每页数量
+     * @return 投稿列表
+     */
+    ContentPostListDTO searchPost(List<String> keywordList, Integer pageNum, Integer pageSize);
 }

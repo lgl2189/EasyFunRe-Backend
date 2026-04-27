@@ -4,6 +4,7 @@ import com.star.easyfun.common.constant.CommonRequestHeader;
 import com.star.easyfun.common.pojo.dto.Result;
 import com.star.easyfun.common.util.ResultUtil;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
+import com.star.easyfun.content.pojo.dto.ContentPostListDTO;
 import com.star.easyfun.content.pojo.dto.VideoPostUploadDTO;
 import com.star.easyfun.content.service.BehaviorRecordAsyncService;
 import com.star.easyfun.content.service.ContentService;
@@ -39,6 +40,9 @@ public class PostController {
                           @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId
     ) throws Exception {
         ContentPostDTO contentPostDTO = contentService.getPost(postId, userId);
+        if (contentPostDTO == null) {
+            return ResultUtil.fail_20000("投稿不存在");
+        }
         contentService.recordBrowsePost(postId, userId);
         return ResultUtil.success_10000(contentPostDTO, "测试视频投稿");
     }
@@ -83,12 +87,8 @@ public class PostController {
     public Result searchPost(@RequestParam("keyword") List<String> keywordList,
                              @RequestParam("pageNum") Integer pageNum,
                              @RequestParam("pageSize") Integer pageSize) {
-        return ResultUtil.success_10000(null, "搜索结果分页列表获取成功");
+        ContentPostListDTO contentPostListDTO = contentService.searchPost(keywordList, pageNum, pageSize);
+        return ResultUtil.success_10000(contentPostListDTO, "搜索结果分页列表获取成功");
     }
 
-    @GetMapping("/recommend/list")
-    public Result recommendPostList(@RequestParam("pageSize") Integer pageSize,
-                                    @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId) {
-        return ResultUtil.success_10000(null, "推荐列表获得成功");
-    }
 }

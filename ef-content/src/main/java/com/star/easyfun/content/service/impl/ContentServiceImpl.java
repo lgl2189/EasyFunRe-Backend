@@ -2,6 +2,7 @@ package com.star.easyfun.content.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.star.easyfun.content.constant.PostConstant;
 import com.star.easyfun.content.constant.RedisKeyConstant;
 import com.star.easyfun.content.mapper.ContentInteractionRecordMapper;
@@ -13,6 +14,7 @@ import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostResourceDBO;
 import com.star.easyfun.content.pojo.dbo.ContentResourceDBO;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
+import com.star.easyfun.content.pojo.dto.ContentPostListDTO;
 import com.star.easyfun.content.pojo.dto.ContentResourceDTO;
 import com.star.easyfun.content.pojo.dto.VideoPostUploadDTO;
 import com.star.easyfun.content.pojo.mapper.PostStructMapper;
@@ -49,7 +51,7 @@ public class ContentServiceImpl implements ContentService {
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional
     public Long uploadVideoPost(VideoPostUploadDTO dto, Long ownerId) {
 
         // 1. 创建 ContentPostDBO 主表
@@ -133,6 +135,9 @@ public class ContentServiceImpl implements ContentService {
     public ContentPostDTO getPost(Long postId, Long userId) throws Exception {
         // 获取投稿内容
         ContentPostDBO contentPostDBO = postMapper.selectById(postId);
+        if(contentPostDBO == null){
+            return null;
+        }
         LambdaQueryWrapper<ContentPostResourceDBO> resourceListWrapper = new LambdaQueryWrapper<>();
         resourceListWrapper.eq(ContentPostResourceDBO::getPostId, postId);
         List<ContentResourceDTO> resourceDTOList = postMapper.selectResourceList(postId);
@@ -146,8 +151,10 @@ public class ContentServiceImpl implements ContentService {
         interactionQueryWrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId);
         interactionQueryWrapper.eq(ContentInteractionRecordDBO::getOwnerId, userId);
         ContentInteractionRecordDBO interactionRecordDBO = interactionRecordMapper.selectOne(interactionQueryWrapper);
-        contentPostDTO.setIsLike(interactionRecordDBO.getIsLike());
-        contentPostDTO.setIsDislike(interactionRecordDBO.getIsDislike());
+        if(interactionRecordDBO != null){
+            contentPostDTO.setIsLike(interactionRecordDBO.getIsLike());
+            contentPostDTO.setIsDislike(interactionRecordDBO.getIsDislike());
+        }
         return contentPostDTO;
     }
 
@@ -284,5 +291,12 @@ public class ContentServiceImpl implements ContentService {
             interactionRecordMapper.updateById(interactionRecordDBO);
         }
         return true;
+    }
+
+    @Override
+    public ContentPostListDTO searchPost(List<String> keywordList, Integer pageNum, Integer pageSize) {
+        Page<ContentPostDBO> page = new Page<>(pageNum, pageSize);
+        postMapper.searchPostByKeywordList(page, keywordList);
+        return postStructMapper.fromPage(page);
     }
 }
