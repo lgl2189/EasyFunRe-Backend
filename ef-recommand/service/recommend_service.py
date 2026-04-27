@@ -1,15 +1,14 @@
 from typing import List, Dict, Any, Set
+
 import numpy as np
 import pandas as pd
-import requests
 import redis
 
+from schemas.recommend import RecommendRequestDTO, RecommendItem
 from service.modules.cold_start import ColdStartService
 from service.modules.collaborative_filtering import BPR_MF
 from service.modules.content_feature_fusion import ContentFeatureService
-from service.modules.fusion_user_control import HybridFusionService, RecommendParam
-
-from schemas.recommend import RecommendRequestDTO, RecommendItem
+from service.modules.hybrid import HybridFusionService, RecommendParam
 
 
 class RecommendService:
@@ -52,7 +51,7 @@ class RecommendService:
         self.postMeta: Dict[int, Dict] = {}
         self.postFeatures: Dict[int, np.ndarray] = {}
 
-    # ====================== 新增：Redis缓存优化方法 ======================
+    # ====================== Redis缓存优化方法 ======================
     def _get_all_recommended_post_ids(self, user_id: int) -> Set[int]:
         """
         获取用户所有已推荐的postId集合（从所有推荐列表key中读取，仅调用1次Redis）
@@ -115,7 +114,8 @@ class RecommendService:
             self.redis_client.rpush(cache_key, *post_ids_str)  # 批量写入列表
             self.redis_client.expire(cache_key, 300)  # 5分钟过期
 
-            print(f"✅ [Redis缓存] 批量设置推荐缓存(user={user_id}, key={cache_key})，包含{len(post_ids)}个投稿，5分钟后过期")
+            print(
+                f"✅ [Redis缓存] 批量设置推荐缓存(user={user_id}, key={cache_key})，包含{len(post_ids)}个投稿，5分钟后过期")
         except Exception as e:
             print(f"⚠️ [Redis缓存] 批量设置异常(user={user_id}): {str(e)}")
 
@@ -362,3 +362,62 @@ class RecommendService:
             import traceback
             traceback.print_exc()
             return False
+
+    # ====================== 新增：冷启动标签获取（Service 协调层） ======================
+    def get_cold_start_tags(self, videos: List[Dict], limit: int = 50) -> Dict[str, Any]:
+        """
+        获取冷启动兴趣标签列表 - 带 Redis 缓存
+        缓存 Key: cold_start:tag-list
+        过期时间: 30 天（1个月）
+        """
+        cache_key = "cold_start:tag-list"
+
+        try:
+            # 1. 先检查 Redis 缓存
+            cached_tags = self.redis_client.get(cache_key)
+            if cached_tags:
+                import pickle
+                tags = pickle.loads(cached_tags)
+                print(f"✅ [Redis缓存] 命中冷启动标签缓存，返回 {len(tags)} 个标签")
+                return {"tags": tags}
+
+            print(f"🔧 [RecommendService] 未命中缓存，开始协调冷启动标签提取，视频数量: {len(videos)}")
+
+            # 2. 调用 ColdStartService 执行标签提取
+            tags = self.coldStartService.extract_cold_start_tags(videos, limit=limit)
+
+            # 3. 将标签列表缓存到 Redis（序列化后存储）
+            import pickle
+            self.redis_client.set(
+                cache_key,
+                pickle.dumps(tags),
+                ex=30 * 24 * 60 * 60   # 30天 = 2592000 秒
+            )
+
+            print(f"✅ [Redis缓存] 冷启动标签已缓存到 Redis (key={cache_key})，有效期30天 | 标签数量: {len(tags)}")
+
+            return {
+                "tags": tags
+            }
+
+        except Exception as e:
+            print(f"❌ [RecommendService] 协调冷启动标签时异常: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # 异常时尝试从缓存读取（兜底）
+            try:
+                cached_tags = self.redis_client.get(cache_key)
+                if cached_tags:
+                    import pickle
+                    tags = pickle.loads(cached_tags)
+                    print("⚠️ 使用 Redis 缓存中的旧标签作为兜底")
+                    return {"tags": tags}
+            except:
+                pass
+
+            # 最终兜底：返回默认标签
+            tags = self.coldStartService.extract_cold_start_tags([], limit=limit)
+            return {
+                "tags": tags
+            }

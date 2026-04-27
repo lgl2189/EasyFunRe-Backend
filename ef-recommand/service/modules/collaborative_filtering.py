@@ -194,5 +194,5 @@ class BPR_MF:
         self.global_bias = state["global_bias"]
         self.post_to_temp = state.get("post_to_temp", {})
         self.temp_to_post = state.get("temp_to_post", {})
-        print("✅ BPR 模型已从 Redis 加载（包含 postId 映射）")
+        print("✅ BPR 模型和PostId映射已从 Redis 加载")
         return True

@@ -134,3 +134,82 @@ class ColdStartService:
 
     def _cosineSimilarity(self, v1, v2):
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-8)
+
+    # ====================== 新增：冷启动兴趣标签提取逻辑 ======================
+    def extract_cold_start_tags(self, videos: List[Dict], limit: int = 50) -> List[str]:
+        """
+        从视频列表中提取高质量兴趣标签（核心业务逻辑）
+        放在 ColdStartService 中最合适
+        """
+        import re
+        from collections import Counter
+        import jieba
+        import jieba.analyse
+
+        if not videos or len(videos) == 0:
+            print("⚠️ [ColdStartService] 视频数据为空，返回默认标签")
+            default_tags = ["科技", "生活", "娱乐", "美食", "旅行", "教育", "音乐", "电影", "游戏", "体育",
+                            "时尚", "健康", "汽车", "财经", "新闻", "AI", "编程", "摄影", "短视频", "动画"]
+            return default_tags[:limit]
+
+        print(f"✅ [ColdStartService] 开始从 {len(videos)} 个视频提取兴趣标签...")
+
+        # 1. 准备语料和全局词频
+        all_texts: List[str] = []
+        global_word_counter = Counter()
+
+        for v in videos:
+            title = str(v.get('title') or v.get('Title') or "")
+            desc = str(v.get('description') or v.get('desc') or v.get('Description') or "")
+            tags_str = str(v.get('tags') or v.get('Tags') or v.get('category') or v.get('Category') or "")
+
+            combined = f"{title} {desc} {tags_str}".strip()
+            if not combined:
+                continue
+
+            all_texts.append(combined)
+
+            # 全局词频辅助
+            words = jieba.lcut(combined)
+            filtered = [w for w in words if len(w) >= 2 and not re.match(r'^\d+$', w)]
+            global_word_counter.update(filtered)
+
+        if not all_texts:
+            print("⚠️ [ColdStartService] 无有效文本，使用默认标签")
+            return ["科技", "生活", "娱乐", "美食", "旅行", "教育"][:limit]
+
+        # 2. TF-IDF 提取关键词
+        corpus_text = " ".join(all_texts)
+
+        tfidf_keywords = jieba.analyse.extract_tags(
+            corpus_text,
+            topK=limit * 4,
+            withWeight=True,
+            allowPOS=('n', 'vn', 'nr', 'ns', 'nt', 'nz', 'l')
+        )
+
+        # 3. 综合评分排序（TF-IDF + 全局频率）
+        candidate_tags = []
+        seen = set()
+
+        for word, tfidf_score in tfidf_keywords:
+            if word in seen or len(word) < 2:
+                continue
+            freq = global_word_counter.get(word, 1)
+            score = tfidf_score * 0.75 + (freq / max(1, len(videos))) * 0.25
+            candidate_tags.append((word, score))
+            seen.add(word)
+
+        # 4. 兜底补充高频词
+        for word, freq in global_word_counter.most_common(limit * 3):
+            if word not in seen and len(word) >= 2 and not re.match(r'^\d+$', word):
+                score = freq / max(1, len(videos)) * 0.6
+                candidate_tags.append((word, score))
+                seen.add(word)
+
+        # 5. 最终返回
+        candidate_tags.sort(key=lambda x: x[1], reverse=True)
+        final_tags = [tag for tag, _ in candidate_tags[:limit]]
+
+        print(f"✅ [ColdStartService] 标签提取完成 → 返回 {len(final_tags)} 个标签")
+        return final_tags

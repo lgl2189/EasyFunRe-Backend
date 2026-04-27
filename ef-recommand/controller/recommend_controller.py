@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Body
-from schemas.recommend import RecommendRequestDTO, RecommendResponse
+from schemas.recommend import RecommendRequestDTO, RecommendResponse, RecommendTagItem
 from service.recommend_service import RecommendService
 import requests
 import pandas as pd
-from typing import Dict
+from typing import Dict, List, Any
 
 router = APIRouter(prefix="/recommend", tags=["推荐服务"])
 
@@ -111,7 +111,7 @@ async def train_cf_model():
         temp_to_post: Dict[int, int] = {idx: item['postId'] for idx, item in enumerate(valid_posts)}
         n_items = len(valid_posts)
 
-        print(f"✅ 创建连续映射完成 → 有效视频数 = {n_items} | tempPostId 范围: 0 ~ {n_items-1}")
+        print(f"✅ 创建连续映射完成 → 有效视频数 = {n_items} | tempPostId 范围: 0 ~ {n_items - 1}")
 
         # 过滤并添加 tempPostId
         df_filtered = df[df['post_id'].isin(post_to_temp.keys())].copy()
@@ -148,3 +148,53 @@ async def train_cf_model():
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ====================== 新增：冷启动兴趣标签接口（Controller 只做数据预处理） ======================
+@router.get("/cold-start/tags", response_model=List[RecommendTagItem])
+async def get_cold_start_tags(
+        limit: int = Query(50, ge=10, le=200, description="返回的兴趣标签数量")
+):
+    """
+    获取冷启动注册用的兴趣标签列表
+    返回结构：[{"tagName": "美食"}, {"tagName": "旅行"}, ...]
+    Java 端可直接映射为 List<RecommendTagDTO>
+    """
+    try:
+        print(f"📡 [ColdStart Tags Controller] 开始数据预处理... limit={limit}")
+
+        video_resp = requests.get("http://localhost:8093/recommend/video/all", timeout=20)
+        video_resp.raise_for_status()
+        video_result = video_resp.json()
+
+        videos: List[Dict] = video_result.get('data') if isinstance(video_result, dict) else video_result
+        if not isinstance(videos, list):
+            videos = []
+
+        print(f"✅ [Controller] 数据预处理完成，获取到 {len(videos)} 个视频")
+
+        # 调用 Service
+        result = recommendService.get_cold_start_tags(videos, limit=limit)
+
+        # 提取纯 tags 列表
+        tags_list: List[str] = result.get("tags", [])
+
+        # 转换为 Java 需要的对象数组格式
+        tag_items = [{"tagName": tag} for tag in tags_list]
+
+        print(f"✅ 返回 {len(tag_items)} 个标签给 Java 端")
+        return tag_items   # 直接返回 list of dict，FastAPI 会自动序列化为 JSON 数组
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ [ColdStart Tags Controller] 请求视频接口失败: {e}")
+        default_tags = ["科技", "生活", "娱乐", "美食", "旅行", "教育"]
+        tag_items = [{"tagName": tag} for tag in default_tags[:limit]]
+        return tag_items
+
+    except Exception as e:
+        print(f"❌ [ColdStart Tags Controller] 数据预处理异常: {e}")
+        import traceback
+        traceback.print_exc()
+        default_tags = ["科技", "生活", "娱乐", "美食", "旅行", "教育"]
+        tag_items = [{"tagName": tag} for tag in default_tags[:limit]]
+        return tag_items

@@ -46,3 +46,15 @@ class RecommendResponse(BaseModel):
     message: str
     debugQueryParams: Dict[str, Any] = {}
     debugRequestBody: Dict[str, Any] = {}
+
+
+# schemas/recommend.py  在 ColdStartTagsResponse 之后添加
+
+class RecommendTagItem(BaseModel):
+    """
+    单个冷启动标签项，与 Java 的 RecommendTagDTO 对应
+    """
+    tagName: str
+
+    class Config:
+        populate_by_name = True
