@@ -66,6 +66,9 @@ public class RecommendController {
     @GetMapping("/param")
     public Result getUserParam(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId) {
         RecommendParamDBO recommendParamDBO = recommendService.getUserRecommendParam(userId);
+        if(recommendParamDBO == null){
+            recommendParamDBO = new RecommendParamDBO(null, userId, 0.55f, 0.1f, 0.15f);
+        }
         return ResultUtil.success_10000(recommendParamDBO, "参数获得成功");
     }
 
