@@ -22,4 +22,5 @@ import java.util.List;
 public class RecommendRequestDTO {
     List<ContentPostDBO> postList;
     List<ContentInteractionRecordDBO> interactionList;
+    List<RecommendTagDTO> userTagList;
 }

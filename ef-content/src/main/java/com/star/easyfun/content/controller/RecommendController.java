@@ -1,5 +1,6 @@
 package com.star.easyfun.content.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.star.easyfun.common.constant.CommonRequestHeader;
 import com.star.easyfun.common.pojo.dto.Result;
 import com.star.easyfun.common.util.ResultUtil;
@@ -11,7 +12,9 @@ import com.star.easyfun.content.service.RecommendService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author ：Star
@@ -30,7 +33,7 @@ public class RecommendController {
             @RequestParam("pageSize") Integer pageSize,
             @RequestParam("alpha") Float alpha,
             @RequestParam("wDiv") Float wDiv,
-            @RequestParam("wBound") Float wBound) {
+            @RequestParam("wBound") Float wBound) throws JsonProcessingException {
         List<ContentPostDTO> contentPostDTOList = recommendService.getRecommendPostList(userId, pageSize, alpha, wDiv, wBound);
         return ResultUtil.success_10000(contentPostDTOList, "推荐列表获得成功");
     }
@@ -49,8 +52,16 @@ public class RecommendController {
 
     @GetMapping("/tag/list")
     public Result getTagList() {
-        List<RecommendTagDTO> tagList = recommendService.getTagList();
-        return ResultUtil.success_10000(tagList, "标签列表获得成功");
+        List<RecommendTagDTO> tagList = recommendService.getAllTagList();
+        Map<String, Object> result = new HashMap<>();
+        result.put("tagList", tagList);
+        return ResultUtil.success_10000(result, "标签列表获得成功");
     }
 
+    @PostMapping("/tag/initial")
+    public Result InitialUserTagList(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
+                             @RequestBody List<RecommendTagDTO> tagList) throws JsonProcessingException {
+        recommendService.registerUserTagList(userId, tagList);
+        return ResultUtil.success_10000("标签保存成功");
+    }
 }

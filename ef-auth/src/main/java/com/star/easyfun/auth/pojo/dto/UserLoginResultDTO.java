@@ -23,7 +23,7 @@ public class UserLoginResultDTO implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public UserLoginResultDTO(JWTPairDTO jwtpairDTO, String deviceId, boolean newDevice) {
+    public UserLoginResultDTO(JWTPairDTO jwtpairDTO, String deviceId, Boolean newDevice) {
         this.accessToken = jwtpairDTO.getAccessToken();
         this.refreshToken = jwtpairDTO.getRefreshToken();
         this.deviceId = deviceId;
@@ -45,10 +45,15 @@ public class UserLoginResultDTO implements Serializable {
     /**
      * 是否是新的设备Id
      */
-    private boolean newDevice;
+    private Boolean newDevice;
 
     /**
      * 用户Id
      */
     private String userId;
+
+    /**
+     * 是否是新用户
+     */
+    private Boolean isNewUser;
 }

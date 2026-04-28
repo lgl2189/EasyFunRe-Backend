@@ -67,7 +67,8 @@ public class AuthController {
                              @RequestHeader(value = CommonRequestHeader.HEADER_DEVICE_ID, required = false) String deviceId,
                              HttpServletRequest request) {
         // 如果手机号未已注册，自动注册
-        if (!userBasicService.checkPhoneExist(loginDTO.getPhone())) {
+        boolean isNewUser = !userBasicService.checkPhoneExist(loginDTO.getPhone());
+        if (isNewUser) {
             boolean registSuccess = userBasicService.register(loginDTO.getPhone());
             if (!registSuccess) {
                 return ResultUtil.fail_50000("注册失败，出现系统内部错误");
@@ -102,7 +103,8 @@ public class AuthController {
             return ResultUtil.fail_50000("系统内部错误，请稍后重试或联系客服");
         }
         UserLoginResultDTO userLoginResultDTO = new UserLoginResultDTO(jwtPairDTO, deviceId, isNewDeviceId)
-                .setUserId(userId);
+                .setUserId(userId)
+                .setIsNewUser(isNewUser);
         return ResultUtil.success_10000(userLoginResultDTO, "登录成功");
     }
 
@@ -155,7 +157,7 @@ public class AuthController {
         }
         // 刷新DeviceId的过期时间
         deviceService.cacheDeviceId(userId, deviceId);
-        Map<String,Object> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
         result.put("userId", userId);
         result.put("accessToken", jwtPairDTO.getAccessToken());
         result.put("refreshToken", jwtPairDTO.getRefreshToken());

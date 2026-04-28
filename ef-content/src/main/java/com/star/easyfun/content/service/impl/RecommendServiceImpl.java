@@ -1,5 +1,8 @@
 package com.star.easyfun.content.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.star.easyfun.content.client.RecommendClient;
 import com.star.easyfun.content.constant.RedisKeyConstant;
 import com.star.easyfun.content.mapper.ContentInteractionRecordMapper;
@@ -36,9 +39,10 @@ public class RecommendServiceImpl implements RecommendService {
     private final RecommendClient recommendClient;
     private final RedisTemplate<String, Object> redisTemplate;
     private final PostStructMapper postStructMapper;
+    private final ObjectMapper jacksonObjectMapper;
 
     @Override
-    public List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize, Float alpha, Float wDiv, Float wBound) {
+    public List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize, Float alpha, Float wDiv, Float wBound) throws JsonProcessingException {
         // 判断冷启动
         String coldStartKey = RedisKeyConstant.getRecommendColdStartCountKey(userId);
         Integer coldStartCount = (Integer) redisTemplate.opsForValue().get(coldStartKey);
@@ -49,9 +53,11 @@ public class RecommendServiceImpl implements RecommendService {
         Boolean isColdStart = coldStartCount < 10;
         // 发送OpenFeign请求
         // 处理返回结果并返回
+        // TODO: 应将此处直接携带投稿列表和交互信息的写法，改为由推荐模块单独向Java端获取。
         List<ContentPostDBO> postList = getAllPost();
         List<ContentInteractionRecordDBO> interactionList = getAllInteractionRecord();
-        RecommendRequestDTO requestDTO = new RecommendRequestDTO(postList, interactionList);
+        List<RecommendTagDTO> userTagList = isColdStart ? getUserTagList(userId) : List.of();
+        RecommendRequestDTO requestDTO = new RecommendRequestDTO(postList, interactionList, userTagList);
         RecommendPostListDTO recommendPostList = recommendClient.getRecommendPostList(userId, isColdStart, pageSize, alpha, wDiv, wBound, requestDTO);
         List<Long> postIdList = recommendPostList.getRecommendPostList().stream()
                 .map(RecommendPostDTO::getPostId).toList();
@@ -79,9 +85,25 @@ public class RecommendServiceImpl implements RecommendService {
     }
 
     @Override
-    public List<RecommendTagDTO> getTagList() {
+    public List<RecommendTagDTO> getAllTagList() {
         return recommendClient.getColdStartTagList(50);
     }
 
+    @Override
+    public void registerUserTagList(Long userId, List<RecommendTagDTO> tagList) throws JsonProcessingException {
+        // Redis缓存用户初始标签列表
+        String key = RedisKeyConstant.getContentUserTagListKey(userId);
+        redisTemplate.opsForValue().set(key, jacksonObjectMapper.writeValueAsString(tagList));
+    }
 
+    @Override
+    public List<RecommendTagDTO> getUserTagList(Long userId) throws JsonProcessingException {
+        String key = RedisKeyConstant.getContentUserTagListKey(userId);
+        Object tagListObj = redisTemplate.opsForValue().get(key);
+        if (tagListObj == null) {
+            return List.of();
+        }
+        return jacksonObjectMapper.readValue(tagListObj.toString(), new TypeReference<>() {
+        });
+    }
 }

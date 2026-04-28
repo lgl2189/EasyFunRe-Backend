@@ -1,5 +1,6 @@
 package com.star.easyfun.content.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.star.easyfun.content.pojo.dbo.ContentInteractionRecordDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
@@ -25,7 +26,7 @@ public interface RecommendService {
      * @param wBound   推荐系统的wBound的参数
      * @return 推荐投稿列表
      */
-    List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize, Float alpha, Float wDiv, Float wBound);
+    List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize, Float alpha, Float wDiv, Float wBound) throws JsonProcessingException;
 
     /**
      * 获取所有投稿列表
@@ -45,5 +46,19 @@ public interface RecommendService {
      * 获取冷启动标签列表
      * @return 冷启动标签列表
      */
-    List<RecommendTagDTO> getTagList();
+    List<RecommendTagDTO> getAllTagList();
+
+    /**
+     * 注册用户初始标签列表
+     * @param userId 用户id
+     * @param tagList 初始标签列表
+     */
+    void registerUserTagList(Long userId,List<RecommendTagDTO> tagList) throws JsonProcessingException;
+
+    /**
+     * 获取用户初始标签列表
+     * @param userId 用户id
+     * @return 用户初始标签列表
+     */
+    List<RecommendTagDTO> getUserTagList(Long userId) throws JsonProcessingException;
 }
