@@ -64,6 +64,9 @@ public class RecommendServiceImpl implements RecommendService {
         List<RecommendTagDTO> userTagList = isColdStart ? getUserTagList(userId) : List.of();
         RecommendRequestDTO requestDTO = new RecommendRequestDTO(postList, interactionList, userTagList);
         RecommendParamDBO recommendParamDBO = getUserRecommendParam(userId);
+        if(recommendParamDBO == null){
+            recommendParamDBO = new RecommendParamDBO(null, userId, 0.55f, 0.1f, 0.15f);
+        }
         RecommendPostListDTO recommendPostList = recommendClient.getRecommendPostList(
                 userId,
                 isColdStart, pageSize, recommendParamDBO.getAlpha(),
