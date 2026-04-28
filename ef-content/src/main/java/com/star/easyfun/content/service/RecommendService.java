@@ -3,6 +3,7 @@ package com.star.easyfun.content.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.star.easyfun.content.pojo.dbo.ContentInteractionRecordDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
+import com.star.easyfun.content.pojo.dbo.RecommendParamDBO;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
 import com.star.easyfun.content.pojo.dto.recommend.RecommendTagDTO;
 
@@ -21,12 +22,9 @@ public interface RecommendService {
      *
      * @param userId   用户id
      * @param pageSize 每次推荐的投稿数量
-     * @param alpha    推荐系统的alpha参数
-     * @param wDiv     推荐系统的wDiv参数
-     * @param wBound   推荐系统的wBound的参数
      * @return 推荐投稿列表
      */
-    List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize, Float alpha, Float wDiv, Float wBound) throws JsonProcessingException;
+    List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize) throws JsonProcessingException;
 
     /**
      * 获取所有投稿列表
@@ -44,21 +42,39 @@ public interface RecommendService {
 
     /**
      * 获取冷启动标签列表
+     *
      * @return 冷启动标签列表
      */
     List<RecommendTagDTO> getAllTagList();
 
     /**
      * 注册用户初始标签列表
-     * @param userId 用户id
+     *
+     * @param userId  用户id
      * @param tagList 初始标签列表
      */
-    void registerUserTagList(Long userId,List<RecommendTagDTO> tagList) throws JsonProcessingException;
+    void registerUserTagList(Long userId, List<RecommendTagDTO> tagList) throws JsonProcessingException;
 
     /**
      * 获取用户初始标签列表
+     *
      * @param userId 用户id
      * @return 用户初始标签列表
      */
     List<RecommendTagDTO> getUserTagList(Long userId) throws JsonProcessingException;
+
+    /**
+     * 更新用户推荐参数
+     *
+     * @param recommendParamDBO 推荐参数对象
+     */
+    void updateUserRecommendParam(RecommendParamDBO recommendParamDBO);
+
+    /**
+     * 获取用户推荐参数
+     *
+     * @param userId 用户id
+     * @return 用户推荐参数
+     */
+    RecommendParamDBO getUserRecommendParam(Long userId);
 }

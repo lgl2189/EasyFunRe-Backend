@@ -1,5 +1,7 @@
 package com.star.easyfun.content.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,8 +9,10 @@ import com.star.easyfun.content.client.RecommendClient;
 import com.star.easyfun.content.constant.RedisKeyConstant;
 import com.star.easyfun.content.mapper.ContentInteractionRecordMapper;
 import com.star.easyfun.content.mapper.ContentPostMapper;
+import com.star.easyfun.content.mapper.RecommendParamMapper;
 import com.star.easyfun.content.pojo.dbo.ContentInteractionRecordDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
+import com.star.easyfun.content.pojo.dbo.RecommendParamDBO;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
 import com.star.easyfun.content.pojo.dto.recommend.RecommendPostDTO;
 import com.star.easyfun.content.pojo.dto.recommend.RecommendPostListDTO;
@@ -36,13 +40,14 @@ public class RecommendServiceImpl implements RecommendService {
     private final MinioService minioService;
     private final ContentPostMapper postMapper;
     private final ContentInteractionRecordMapper interactionMapper;
+    private final RecommendParamMapper recommendParamMapper;
     private final RecommendClient recommendClient;
     private final RedisTemplate<String, Object> redisTemplate;
     private final PostStructMapper postStructMapper;
     private final ObjectMapper jacksonObjectMapper;
 
     @Override
-    public List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize, Float alpha, Float wDiv, Float wBound) throws JsonProcessingException {
+    public List<ContentPostDTO> getRecommendPostList(Long userId, Integer pageSize) throws JsonProcessingException {
         // 判断冷启动
         String coldStartKey = RedisKeyConstant.getRecommendColdStartCountKey(userId);
         Integer coldStartCount = (Integer) redisTemplate.opsForValue().get(coldStartKey);
@@ -58,7 +63,13 @@ public class RecommendServiceImpl implements RecommendService {
         List<ContentInteractionRecordDBO> interactionList = getAllInteractionRecord();
         List<RecommendTagDTO> userTagList = isColdStart ? getUserTagList(userId) : List.of();
         RecommendRequestDTO requestDTO = new RecommendRequestDTO(postList, interactionList, userTagList);
-        RecommendPostListDTO recommendPostList = recommendClient.getRecommendPostList(userId, isColdStart, pageSize, alpha, wDiv, wBound, requestDTO);
+        RecommendParamDBO recommendParamDBO = getUserRecommendParam(userId);
+        RecommendPostListDTO recommendPostList = recommendClient.getRecommendPostList(
+                userId,
+                isColdStart, pageSize, recommendParamDBO.getAlpha(),
+                recommendParamDBO.getWDiv(),
+                recommendParamDBO.getWBound(),
+                requestDTO);
         List<Long> postIdList = recommendPostList.getRecommendPostList().stream()
                 .map(RecommendPostDTO::getPostId).toList();
         return postMapper.selectByIds(postIdList).stream()
@@ -105,5 +116,27 @@ public class RecommendServiceImpl implements RecommendService {
         }
         return jacksonObjectMapper.readValue(tagListObj.toString(), new TypeReference<>() {
         });
+    }
+
+    @Override
+    public void updateUserRecommendParam(RecommendParamDBO recommendParamDBO) {
+        RecommendParamDBO temp = recommendParamMapper.selectOne(new LambdaQueryWrapper<RecommendParamDBO>()
+                .eq(RecommendParamDBO::getUserId, recommendParamDBO.getUserId())
+        );
+        if (temp == null) {
+            recommendParamMapper.insert(recommendParamDBO);
+        }
+        else {
+            recommendParamMapper.update(recommendParamDBO, new LambdaUpdateWrapper<RecommendParamDBO>()
+                    .eq(RecommendParamDBO::getUserId, recommendParamDBO.getUserId())
+            );
+        }
+    }
+
+    @Override
+    public RecommendParamDBO getUserRecommendParam(Long userId) {
+        return recommendParamMapper.selectOne(new LambdaQueryWrapper<RecommendParamDBO>()
+                .eq(RecommendParamDBO::getUserId, userId)
+        );
     }
 }

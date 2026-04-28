@@ -6,6 +6,7 @@ import com.star.easyfun.common.pojo.dto.Result;
 import com.star.easyfun.common.util.ResultUtil;
 import com.star.easyfun.content.pojo.dbo.ContentInteractionRecordDBO;
 import com.star.easyfun.content.pojo.dbo.ContentPostDBO;
+import com.star.easyfun.content.pojo.dbo.RecommendParamDBO;
 import com.star.easyfun.content.pojo.dto.ContentPostDTO;
 import com.star.easyfun.content.pojo.dto.recommend.RecommendTagDTO;
 import com.star.easyfun.content.service.RecommendService;
@@ -30,11 +31,8 @@ public class RecommendController {
     @GetMapping("/list")
     public Result recommendPostList(
             @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
-            @RequestParam("pageSize") Integer pageSize,
-            @RequestParam("alpha") Float alpha,
-            @RequestParam("wDiv") Float wDiv,
-            @RequestParam("wBound") Float wBound) throws JsonProcessingException {
-        List<ContentPostDTO> contentPostDTOList = recommendService.getRecommendPostList(userId, pageSize, alpha, wDiv, wBound);
+            @RequestParam("pageSize") Integer pageSize) throws JsonProcessingException {
+        List<ContentPostDTO> contentPostDTOList = recommendService.getRecommendPostList(userId, pageSize);
         return ResultUtil.success_10000(contentPostDTOList, "推荐列表获得成功");
     }
 
@@ -60,8 +58,28 @@ public class RecommendController {
 
     @PostMapping("/tag/initial")
     public Result InitialUserTagList(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
-                             @RequestBody List<RecommendTagDTO> tagList) throws JsonProcessingException {
+                                     @RequestBody List<RecommendTagDTO> tagList) throws JsonProcessingException {
         recommendService.registerUserTagList(userId, tagList);
         return ResultUtil.success_10000("标签保存成功");
+    }
+
+    @GetMapping("/param")
+    public Result getUserParam(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId) {
+        RecommendParamDBO recommendParamDBO = recommendService.getUserRecommendParam(userId);
+        return ResultUtil.success_10000(recommendParamDBO, "参数获得成功");
+    }
+
+    @PostMapping("/param")
+    public Result updateUserParam(@RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
+                                  @RequestParam("alpha") Float alpha,
+                                  @RequestParam("wDiv") Float wDiv,
+                                  @RequestParam("wBound") Float wBound) {
+        RecommendParamDBO recommendParamDBO = new RecommendParamDBO()
+                .setUserId(userId)
+                .setAlpha(alpha)
+                .setWDiv(wDiv)
+                .setWBound(wBound);
+        recommendService.updateUserRecommendParam(recommendParamDBO);
+        return ResultUtil.success_10000("参数保存成功");
     }
 }
