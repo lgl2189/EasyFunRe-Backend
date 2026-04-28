@@ -21,6 +21,7 @@ async def getRecommendPostList(
         body: RecommendRequestDTO = Body(...)
 ):
     try:
+        print(body.userTagList)
         result = await recommendService.getRecommendationPostList(
             userId=userId,
             isColdStart=isColdStart,
@@ -150,7 +151,7 @@ async def train_cf_model():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ====================== 新增：冷启动兴趣标签接口（Controller 只做数据预处理） ======================
+# ====================== 新增：冷启动兴趣标签接口 ======================
 @router.get("/cold-start/tags", response_model=List[RecommendTagItem])
 async def get_cold_start_tags(
         limit: int = Query(50, ge=10, le=200, description="返回的兴趣标签数量")
@@ -183,7 +184,7 @@ async def get_cold_start_tags(
         tag_items = [{"tagName": tag} for tag in tags_list]
 
         print(f"✅ 返回 {len(tag_items)} 个标签给 Java 端")
-        return tag_items   # 直接返回 list of dict，FastAPI 会自动序列化为 JSON 数组
+        return tag_items  # 直接返回 list of dict，FastAPI 会自动序列化为 JSON 数组
 
     except requests.exceptions.RequestException as e:
         print(f"❌ [ColdStart Tags Controller] 请求视频接口失败: {e}")

@@ -12,7 +12,7 @@ from service.modules.hybrid import HybridFusionService, RecommendParam
 
 
 class RecommendService:
-    def __init__(self, vectorDim: int = 50, contentDim: int = 300):
+    def __init__(self, vectorDim: int = 300, contentDim: int = 300):
         self.vectorDim = vectorDim
         self.contentDim = contentDim
 
@@ -76,7 +76,6 @@ class RecommendService:
                 post_ids = [int(pid.decode('utf-8')) for pid in post_ids_bytes if pid]
                 recommended_post_ids.update(post_ids)
 
-            print(f"🔍 [Redis缓存] 用户{user_id}已推荐postId数量：{len(recommended_post_ids)}")
             return recommended_post_ids
         except Exception as e:
             print(f"⚠️ [Redis缓存] 获取已推荐列表异常(user={user_id}): {str(e)}")
@@ -120,8 +119,9 @@ class RecommendService:
             print(f"⚠️ [Redis缓存] 批量设置异常(user={user_id}): {str(e)}")
 
     # ====================== 原有方法修改 ======================
+    # ====================== 原有方法修改 ======================
     def _processRequestData(self, req: RecommendRequestDTO):
-        """处理请求中的视频和交互数据"""
+        """处理请求中的视频、交互数据 和 用户标签"""
         posts = []
         for post in req.postList:
             post_dict = {
@@ -132,11 +132,21 @@ class RecommendService:
             }
             posts.append(post_dict)
 
+        user_tags = []
+        if hasattr(req, 'userTagList') and req.userTagList:
+            user_tags = [tag.tagName for tag in req.userTagList
+                         if getattr(tag, 'tagName', None)]
+
         if posts:
             self.postMeta = {v["post_id"]: v for v in posts}
             self.contentService.buildPostVectors(posts)
             self.postFeatures = self.contentService.postVectors.copy()
-            self.coldStartService.setCandidatePosts(posts)
+
+            # 关键改进：把 vectorizer 传递给 ColdStartService
+            self.coldStartService.vectorizer = self.contentService.vectorizer
+            # 关键：将内容向量传递给冷启动模块
+            self.coldStartService.setCandidatePosts(posts,
+                                                    content_vectors=self.contentService.postVectors)
 
         # 处理交互记录
         interactionsMap: Dict[int, List[tuple]] = {}
@@ -145,11 +155,10 @@ class RecommendService:
             vid = inter.targetPostId
             if uid is None or vid is None:
                 continue
-
             weight = 1.0 if inter.isLike == 1 else (-0.8 if inter.isDislike == 1 else 0.3)
             interactionsMap.setdefault(uid, []).append((vid, weight))
 
-        return interactionsMap
+        return interactionsMap, user_tags  # 返回 (interactionsMap, user_tags)
 
     async def getRecommendationPostList(self, userId: int, isColdStart: bool,
                                         reqBody: RecommendRequestDTO,
@@ -157,30 +166,41 @@ class RecommendService:
                                         alpha: float = 0.5,
                                         wDiv: float = 0.2,
                                         wBound: float = 0.15) -> Dict[str, Any]:
-        interactionsMap = self._processRequestData(reqBody)
+
+        # 统一只调用一次 _processRequestData
+        interactionsMap, user_tags = self._processRequestData(reqBody)
         userInteractions = interactionsMap.get(userId, [])
 
         # 提取用户已交互的视频ID集合
         interacted_post_ids = {vid for vid, _ in userInteractions}
         print(f"🔍 DEBUG [user={userId}] 已交互视频数量 = {len(interacted_post_ids)}")
 
-        # 提前加载用户所有已推荐的postId（仅1次Redis调用）
+        # 提前加载用户所有已推荐的postId
         cached_recommended_set = self._get_all_recommended_post_ids(userId)
 
-        # 更新内容画像
+        # 更新内容画像（非冷启动或有交互时）
         if userInteractions:
             self.contentService.updateUserProfile(userId, userInteractions)
 
         # ====================== 冷启动路径 ======================
         if isColdStart:
+            # 注册用户标签 → 生成冷启动向量
+            if user_tags:
+                self.coldStartService.registerUser(userId, user_tags)
+            else:
+                print(f"⚠️ 用户{userId} 没有传递兴趣标签，使用兜底标签")
+                self.coldStartService.registerUser(userId, ["科技", "生活", "娱乐"])
+
             recs = self.coldStartService.recommend(userId, pageSize)
-            # 过滤：已交互 + 已推荐（复用预加载集合，无额外Redis调用）
+
+            # 过滤：已交互 + 已推荐
             recs = [
                 item for item in recs
                 if item["post_id"] not in interacted_post_ids
                    and not self.is_post_recommended(userId, item["post_id"], cached_recommended_set)
             ]
-            # 补充热门视频（同样复用预加载集合）
+
+            # 补充热门视频
             if len(recs) < pageSize:
                 popular_recs = self.coldStartService._popularRecommendation(pageSize * 2)
                 for item in popular_recs:
@@ -198,7 +218,7 @@ class RecommendService:
                     reason=item.get("reason", "冷启动推荐")
                 ) for item in recs[:pageSize]
             ]
-            # 批量设置缓存（1次Redis调用，替代原循环N次setex）
+
             if items:
                 post_ids = [item.postId for item in items]
                 self.set_post_recommended_batch(userId, post_ids)
@@ -207,38 +227,32 @@ class RecommendService:
                 "userId": userId,
                 "recommendPostList": items,
                 "isColdStart": True,
-                "message": "冷启动阶段 - 基于注册兴趣标签向量推荐（已过滤已交互/已推荐视频）",
+                "message": f"冷启动阶段 - 基于注册兴趣标签向量推荐（{len(user_tags)}个标签）",
                 "actualParams": {"alpha": None, "wDiv": None, "wBound": None},
                 "debugQueryParams": {
                     "userId": userId,
                     "isColdStart": True,
-                    "pageSize": pageSize
+                    "pageSize": pageSize,
+                    "userTagsCount": len(user_tags)
                 },
                 "debugRequestBody": reqBody.model_dump()
             }
 
         # ====================== 正常混合推荐路径 ======================
-        # 构建排除集合：已交互 + 已推荐（复用预加载集合）
         content_exclude_ids = interacted_post_ids.union(cached_recommended_set)
 
-        # 协同过滤：过滤已交互 + 已推荐（复用预加载集合）
         cfScores = self.getCFScores(
             userId,
             candidateSize=150,
             exclude_post_ids=interacted_post_ids,
-            cached_recommended_set=cached_recommended_set  # 传入预加载集合
+            cached_recommended_set=cached_recommended_set
         )
-        # 内容特征：直接排除已交互+已推荐
+
         contentScores = self.contentService.getContentScores(
             userId,
             candidateSize=150,
             exclude_post_ids=content_exclude_ids
         )
-
-        print(f"🔍 DEBUG [user={userId}] cfScores 数量 = {len(cfScores)}")
-        print(f"🔍 DEBUG [user={userId}] contentScores 数量 = {len(contentScores)}")
-        print(f"🔍 DEBUG [user={userId}] postFeatures 数量 = {len(self.postFeatures)}")
-        print(f"🔍 DEBUG 参数生效情况 → alpha={alpha}, wDiv={wDiv}, wBound={wBound}")
 
         fusionParams = RecommendParam(
             alpha=alpha,
@@ -252,7 +266,7 @@ class RecommendService:
             contentScores=contentScores,
             postFeatures=self.postFeatures
         )
-        # 构建返回结果
+
         items = []
         for item in fusedResults:
             items.append(RecommendItem(
@@ -261,7 +275,7 @@ class RecommendService:
                 hybridScore=item["hybridScore"],
                 reason="混合推荐 (CF + 内容特征)" if cfScores else "内容驱动推荐"
             ))
-        # 批量设置缓存（1次Redis调用）
+
         if items:
             post_ids = [item.postId for item in items]
             self.set_post_recommended_batch(userId, post_ids)
@@ -270,7 +284,7 @@ class RecommendService:
             "userId": userId,
             "recommendPostList": items,
             "isColdStart": False,
-            "message": f"混合推荐完成 (α={alpha:.2f}, 多样性={wDiv:.2f}, 破圈={wBound:.2f})（已过滤已交互/已推荐视频）",
+            "message": f"混合推荐完成 (α={alpha:.2f}, 多样性={wDiv:.2f}, 破圈={wBound:.2f})",
             "actualParams": {
                 "alpha": round(alpha, 4),
                 "wDiv": round(wDiv, 4),
@@ -391,7 +405,7 @@ class RecommendService:
             self.redis_client.set(
                 cache_key,
                 pickle.dumps(tags),
-                ex=30 * 24 * 60 * 60   # 30天 = 2592000 秒
+                ex=30 * 24 * 60 * 60  # 30天 = 2592000 秒
             )
 
             print(f"✅ [Redis缓存] 冷启动标签已缓存到 Redis (key={cache_key})，有效期30天 | 标签数量: {len(tags)}")

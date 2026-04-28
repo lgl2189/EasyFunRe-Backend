@@ -27,6 +27,7 @@ class ContentInteractionRecordDBO(BaseModel):
 class RecommendRequestDTO(BaseModel):
     postList: List[ContentPostDBO] = []
     interactionList: List[ContentInteractionRecordDBO] = []
+    userTagList: List["RecommendTagItem"] = []
 
     class Config:
         populate_by_name = True
