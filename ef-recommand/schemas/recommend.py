@@ -47,6 +47,7 @@ class RecommendResponse(BaseModel):
     message: str
     debugQueryParams: Dict[str, Any] = {}
     debugRequestBody: Dict[str, Any] = {}
+    experimentMetrics: Dict[str, Any] = {}   # 用于记录实验结果
 
 
 # schemas/recommend.py  在 ColdStartTagsResponse 之后添加

@@ -4,13 +4,14 @@ import pickle
 import redis
 from typing import Dict, Optional
 
+
 def sigmoid(x):
     return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
 
 
 class BPR_MF:
     """
-    毕业设计最终优化版 BPR Matrix Factorization（支持 tempPostId 映射）
+    毕业设计最终优化版 BPR Matrix Factorization（支持 userId 和 postId 双映射）
     """
     def __init__(self, n_factors: int = 64, lr: float = 0.1, reg: float = 0.0015,
                  n_epochs: int = 100, batch_size: int = 64, n_neg: int = 8):
@@ -34,20 +35,24 @@ class BPR_MF:
         self.m_i_bias = None
         self.momentum = 0.9
 
-        # 新增：postId <-> tempPostId 双向映射（随模型一起保存）
+        # userId 和 postId 双向映射
+        self.user_to_temp: Dict[int, int] = {}
+        self.temp_to_user: Dict[int, int] = {}
         self.post_to_temp: Dict[int, int] = {}
         self.temp_to_post: Dict[int, int] = {}
 
-    def fit(self, df: pd.DataFrame, n_users: int, n_items: int, temp_column: str = "post_id"):
-        """训练主函数（支持 tempPostId 列）"""
+    def fit(self, df: pd.DataFrame, n_users: int, n_items: int,
+            user_column: str = "tempUserId", temp_column: str = "tempPostId"):
+        """训练主函数"""
         if df.empty:
             print("⚠️ 交互数据为空，无法训练")
             return False
 
         positive_inter = df[df['score'] > 0].copy()
+
         user_pos_items: Dict[int, set] = {}
         for uid in range(n_users):
-            pos = positive_inter[positive_inter['user_id'] == uid][temp_column].unique()
+            pos = positive_inter[positive_inter[user_column] == uid][temp_column].unique()
             user_pos_items[uid] = set(pos)
 
         all_items = set(range(n_items))
@@ -121,23 +126,24 @@ class BPR_MF:
         print("🎉 BPR 训练完成！")
         return True
 
-    def predict_scores(self, user_id: int, candidate_posts: Optional[list] = None, exclude_post_ids: set = None) -> \
-    Dict[int, float]:
-        """
-        预测函数（修改版：支持过滤已交互视频）
-        新增参数：
-        - exclude_post_ids: 需要排除的已交互视频ID集合
-        """
-        if self.user_factors is None or user_id >= len(self.user_factors):
+    def predict_scores(self, user_id: int, candidate_posts: Optional[list] = None,
+                       exclude_post_ids: set = None) -> Dict[int, float]:
+        """预测用户对候选视频的分数"""
+        if self.user_factors is None:
             return {}
-        user_vec = self.user_factors[user_id]
-        u_bias = self.user_bias[user_id]
 
-        # 初始化排除集合
+        # 真实 user_id → tempUserId 映射
+        temp_uid = self.user_to_temp.get(user_id, user_id)
+
+        if temp_uid >= len(self.user_factors):
+            return {}
+
+        user_vec = self.user_factors[temp_uid]
+        u_bias = self.user_bias[temp_uid]
+
         if exclude_post_ids is None:
             exclude_post_ids = set()
 
-        # 如果外部传了候选列表就用，否则用所有
         if candidate_posts is not None:
             cands = candidate_posts
         else:
@@ -147,42 +153,44 @@ class BPR_MF:
         for temp_id in cands:
             if temp_id >= len(self.item_factors):
                 continue
-            # 先通过 temp_to_post 映射回真实 postId，再判断是否需要排除
             real_id = self.temp_to_post.get(temp_id, temp_id)
-            if real_id in exclude_post_ids:  # 新增：过滤已交互视频
+            if real_id in exclude_post_ids:
                 continue
 
             score = float(np.dot(user_vec, self.item_factors[temp_id]) +
                           u_bias + self.item_bias[temp_id] + self.global_bias)
             scores[real_id] = score
 
-        # 按分数降序，只保留 Top 150
-        sorted_scores = dict(sorted(scores.items(), key=lambda x: x[1], reverse=True)[:150])
-        if sorted_scores:
-            max_raw = max(sorted_scores.values())
-            scale = 8.0 / max(1.0, max_raw)
-            for vid in sorted_scores:
-                sorted_scores[vid] *= scale
+        # 归一化缩放
+        if scores:
+            sorted_scores = dict(sorted(scores.items(), key=lambda x: x[1], reverse=True)[:150])
+            if sorted_scores:
+                max_raw = max(sorted_scores.values())
+                scale = 8.0 / max(1.0, max_raw)
+                for vid in sorted_scores:
+                    sorted_scores[vid] *= scale
+            return sorted_scores
 
-        print(f"✅ predict_scores 返回 Top-{len(sorted_scores)}（已过滤 {len(exclude_post_ids)} 个已交互视频）")
-        return sorted_scores
+        return {}
 
     def save_to_redis(self, redis_client):
-        """保存模型到 Redis（包含映射）"""
+        """保存模型到 Redis"""
         state = {
             "user_factors": self.user_factors,
             "item_factors": self.item_factors,
             "user_bias": self.user_bias,
             "item_bias": self.item_bias,
             "global_bias": self.global_bias,
+            "user_to_temp": self.user_to_temp,
+            "temp_to_user": self.temp_to_user,
             "post_to_temp": self.post_to_temp,
             "temp_to_post": self.temp_to_post,
         }
         redis_client.set("bpr_model_state", pickle.dumps(state))
-        print("✅ BPR 模型已保存到 Redis (key = bpr_model_state)")
+        print("✅ BPR 模型及映射已保存到 Redis")
 
     def load_from_redis(self, redis_client) -> bool:
-        """从 Redis 加载模型（包含映射）"""
+        """从 Redis 加载模型"""
         data = redis_client.get("bpr_model_state")
         if not data:
             return False
@@ -192,7 +200,9 @@ class BPR_MF:
         self.user_bias = state["user_bias"]
         self.item_bias = state["item_bias"]
         self.global_bias = state["global_bias"]
+        self.user_to_temp = state.get("user_to_temp", {})
+        self.temp_to_user = state.get("temp_to_user", {})
         self.post_to_temp = state.get("post_to_temp", {})
         self.temp_to_post = state.get("temp_to_post", {})
-        print("✅ BPR 模型和PostId映射已从 Redis 加载")
+        print(f"✅ BPR 模型加载成功 | 用户映射: {len(self.user_to_temp)} | 视频映射: {len(self.post_to_temp)}")
         return True

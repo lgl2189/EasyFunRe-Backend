@@ -21,7 +21,6 @@ async def getRecommendPostList(
         body: RecommendRequestDTO = Body(...)
 ):
     try:
-        print(body.userTagList)
         result = await recommendService.getRecommendationPostList(
             userId=userId,
             isColdStart=isColdStart,
@@ -40,10 +39,8 @@ async def getRecommendPostList(
 
 @router.post("/train/cf-model", response_model=dict)
 async def train_cf_model():
-    """手动触发 BPR 模型训练（数据拉取和预处理放在 Controller 中）"""
+    """手动触发 BPR 模型训练（支持 userId 连续映射）"""
     try:
-        print("📡 Controller 开始拉取训练数据...")
-
         # 1. 获取交互记录
         inter_resp = requests.get("http://localhost:8093/recommend/interaction/all", timeout=15)
         inter_resp.raise_for_status()
@@ -54,17 +51,13 @@ async def train_cf_model():
         video_resp.raise_for_status()
         video_result = video_resp.json()
 
-        # 提取 data
         interactions = inter_result.get('data') if isinstance(inter_result, dict) else None
         videos = video_result.get('data') if isinstance(video_result, dict) else None
 
         if not interactions or not isinstance(interactions, list):
             return {"success": False, "message": "交互数据为空或格式错误"}
 
-        # 转为 DataFrame 并处理
         df = pd.DataFrame(interactions)
-
-        # 字段映射
         df = df.rename(columns={
             'ownerId': 'user_id',
             'targetPostId': 'post_id',
@@ -72,7 +65,6 @@ async def train_cf_model():
             'isDislike': 'is_dislike'
         })
 
-        # 构造 score 列
         def compute_score(row):
             if row.get('is_like') == 1:
                 return 4.0
@@ -82,8 +74,6 @@ async def train_cf_model():
                 return 1.0
 
         df['score'] = df.apply(compute_score, axis=1)
-
-        # 数据清理
         df = df.dropna(subset=['user_id', 'post_id'])
         df['user_id'] = df['user_id'].astype(int)
         df['post_id'] = df['post_id'].astype(int)
@@ -91,9 +81,7 @@ async def train_cf_model():
         if df.empty:
             return {"success": False, "message": "过滤后没有有效交互数据"}
 
-        print(f"✅ Controller 数据预处理完成 → 交互条数 = {len(df)}")
-
-        # ==================== 新增：创建 postId → tempPostId 连续映射 ====================
+        # ==================== 视频映射 ====================
         valid_posts = []
         seen = set()
         for v in videos or []:
@@ -102,32 +90,36 @@ async def train_cf_model():
                 pid = int(pid)
                 if pid not in seen:
                     seen.add(pid)
-                    valid_posts.append({**v, 'postId': pid})  # 确保键一致
+                    valid_posts.append({**v, 'postId': pid})
 
-        if not valid_posts:
-            return {"success": False, "message": "视频列表为空，无法创建映射"}
-
-        valid_posts.sort(key=lambda x: x['postId'])  # 保证映射稳定
+        valid_posts.sort(key=lambda x: x['postId'])
         post_to_temp: Dict[int, int] = {item['postId']: idx for idx, item in enumerate(valid_posts)}
         temp_to_post: Dict[int, int] = {idx: item['postId'] for idx, item in enumerate(valid_posts)}
         n_items = len(valid_posts)
 
-        print(f"✅ 创建连续映射完成 → 有效视频数 = {n_items} | tempPostId 范围: 0 ~ {n_items - 1}")
+        # ==================== 用户映射 ====================
+        valid_users = sorted(df['user_id'].unique())
+        user_to_temp: Dict[int, int] = {uid: idx for idx, uid in enumerate(valid_users)}
+        temp_to_user: Dict[int, int] = {idx: uid for idx, uid in enumerate(valid_users)}
+        n_users = len(valid_users)
 
-        # 过滤并添加 tempPostId
+        # ==================== 数据过滤并添加 temp 列 ====================
         df_filtered = df[df['post_id'].isin(post_to_temp.keys())].copy()
-        if df_filtered.empty:
-            return {"success": False, "message": "过滤后无有效交互数据"}
-
         df_filtered['tempPostId'] = df_filtered['post_id'].map(post_to_temp)
-        dropped = len(df) - len(df_filtered)
-        print(f"交互数据过滤: {len(df)} → {len(df_filtered)} 条 (丢弃 {dropped} 条历史无效视频交互)")
+        df_filtered['tempUserId'] = df_filtered['user_id'].map(user_to_temp)
 
-        # 调用 Service 进行训练（传入映射）
+        df_filtered = df_filtered.dropna(subset=['tempUserId', 'tempPostId'])
+        df_filtered['tempUserId'] = df_filtered['tempUserId'].astype(int)
+        df_filtered['tempPostId'] = df_filtered['tempPostId'].astype(int)
+
+        # 调用 Service 训练
         success = recommendService.train_cf_model_with_data(
             df=df_filtered,
             videos=valid_posts,
+            n_users=n_users,
             n_items=n_items,
+            user_to_temp=user_to_temp,
+            temp_to_user=temp_to_user,
             post_to_temp=post_to_temp,
             temp_to_post=temp_to_post
         )
@@ -135,15 +127,12 @@ async def train_cf_model():
         if success:
             return {
                 "success": True,
-                "message": "✅ BPR 协同过滤模型训练完成并已保存到 Redis！（使用连续 tempPostId）",
-                "tip": "现在可以正常使用非冷启动推荐了"
+                "message": f"✅ BPR 模型训练完成！有效用户={n_users}，有效视频={n_items}",
+                "tip": "现在 CF 模块对新用户支持更好"
             }
         else:
             return {"success": False, "message": "训练失败，请查看控制台日志"}
 
-    except requests.exceptions.RequestException as e:
-        print(f"❌ 请求 Java 服务失败: {e}")
-        return {"success": False, "message": f"请求后端失败: {str(e)}"}
     except Exception as e:
         print(f"❌ Controller 处理异常: {e}")
         import traceback
@@ -151,7 +140,7 @@ async def train_cf_model():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ====================== 新增：冷启动兴趣标签接口 ======================
+# ====================== 冷启动兴趣标签接口 ======================
 @router.get("/cold-start/tags", response_model=List[RecommendTagItem])
 async def get_cold_start_tags(
         limit: int = Query(50, ge=10, le=200, description="返回的兴趣标签数量")
@@ -159,11 +148,8 @@ async def get_cold_start_tags(
     """
     获取冷启动注册用的兴趣标签列表
     返回结构：[{"tagName": "美食"}, {"tagName": "旅行"}, ...]
-    Java 端可直接映射为 List<RecommendTagDTO>
     """
     try:
-        print(f"📡 [ColdStart Tags Controller] 开始数据预处理... limit={limit}")
-
         video_resp = requests.get("http://localhost:8093/recommend/video/all", timeout=20)
         video_resp.raise_for_status()
         video_result = video_resp.json()
@@ -172,28 +158,24 @@ async def get_cold_start_tags(
         if not isinstance(videos, list):
             videos = []
 
-        print(f"✅ [Controller] 数据预处理完成，获取到 {len(videos)} 个视频")
-
-        # 调用 Service
+        # 调用 Service 获取标签
         result = recommendService.get_cold_start_tags(videos, limit=limit)
 
-        # 提取纯 tags 列表
         tags_list: List[str] = result.get("tags", [])
 
-        # 转换为 Java 需要的对象数组格式
+        # 转换为 Java 端需要的格式
         tag_items = [{"tagName": tag} for tag in tags_list]
 
-        print(f"✅ 返回 {len(tag_items)} 个标签给 Java 端")
-        return tag_items  # 直接返回 list of dict，FastAPI 会自动序列化为 JSON 数组
+        return tag_items
 
     except requests.exceptions.RequestException as e:
-        print(f"❌ [ColdStart Tags Controller] 请求视频接口失败: {e}")
+        print(f"❌ [ColdStart Tags] 请求视频接口失败: {e}")
         default_tags = ["科技", "生活", "娱乐", "美食", "旅行", "教育"]
         tag_items = [{"tagName": tag} for tag in default_tags[:limit]]
         return tag_items
 
     except Exception as e:
-        print(f"❌ [ColdStart Tags Controller] 数据预处理异常: {e}")
+        print(f"❌ [ColdStart Tags] 处理异常: {e}")
         import traceback
         traceback.print_exc()
         default_tags = ["科技", "生活", "娱乐", "美食", "旅行", "教育"]

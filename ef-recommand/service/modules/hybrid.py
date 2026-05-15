@@ -57,7 +57,7 @@ class HybridFusionService:
             sCf = normCf.get(vid, 0.0)
             sCt = normContent.get(vid, 0.0)
             baseScore = params.alpha * sCf + (1.0 - params.alpha) * sCt
-            explorationBonus = params.wBound * (1.0 - sCt) * 0.5
+            explorationBonus = params.wBound * (1.0 - sCt)
             fusedScores[vid] = baseScore + explorationBonus
 
         lambdaVal = 1.0 - params.wDiv

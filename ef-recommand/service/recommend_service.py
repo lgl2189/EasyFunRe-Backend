@@ -1,3 +1,4 @@
+import pickle
 from typing import List, Dict, Any, Set
 
 import numpy as np
@@ -16,50 +17,35 @@ class RecommendService:
         self.vectorDim = vectorDim
         self.contentDim = contentDim
 
-        # 四个模块实例化
         self.coldStartService = ColdStartService(vectorDim=vectorDim)
         self.contentService = ContentFeatureService(targetDim=contentDim)
         self.fusionService = HybridFusionService()
 
-        # BPR 模型（使用你最新的优化版）
         self.bprModel: BPR_MF = BPR_MF(
-            n_factors=64,
-            lr=0.1,
-            reg=0.0015,
-            n_epochs=100,
-            batch_size=64,
-            n_neg=8
+            n_factors=64, lr=0.1, reg=0.0015,
+            n_epochs=100, batch_size=64, n_neg=8
         )
 
-        # Redis 连接
         self.redis_client = redis.Redis(
             host="192.168.150.105",
             port=6379,
             username="easyfun",
             password="12345678",
-            db=1,  # 固定使用数据库1
+            db=1,
             decode_responses=False,
             socket_connect_timeout=5,
             socket_timeout=10
         )
 
-        # 启动时尝试从 Redis 加载已训练的 BPR 模型
         if not self.bprModel.load_from_redis(self.redis_client):
-            print("⚠️ Redis 中没有找到 BPR 模型，请先调用 /recommend/train/cf-model 接口进行训练")
+            print("⚠️ Redis 中没有找到 BPR 模型，请先进行训练")
 
-        # 内存缓存
         self.postMeta: Dict[int, Dict] = {}
         self.postFeatures: Dict[int, np.ndarray] = {}
 
-    # ====================== Redis缓存优化方法 ======================
+    # ====================== Redis 推荐缓存 ======================
     def _get_all_recommended_post_ids(self, user_id: int) -> Set[int]:
-        """
-        获取用户所有已推荐的postId集合（从所有推荐列表key中读取，仅调用1次Redis）
-        :param user_id: 用户ID
-        :return: 已推荐的postId集合
-        """
         try:
-            # 匹配该用户的所有推荐列表key（避免用KEYS命令阻塞Redis）
             pattern = f"post:recommended:{user_id}:*"
             cursor = 0
             all_keys = []
@@ -69,84 +55,51 @@ class RecommendService:
                 if cursor == 0:
                     break
 
-            # 批量读取所有列表内容并合并为集合
             recommended_post_ids = set()
             for key in all_keys:
-                post_ids_bytes = self.redis_client.lrange(key, 0, -1)  # 获取列表所有元素
+                post_ids_bytes = self.redis_client.lrange(key, 0, -1)
                 post_ids = [int(pid.decode('utf-8')) for pid in post_ids_bytes if pid]
                 recommended_post_ids.update(post_ids)
 
             return recommended_post_ids
-        except Exception as e:
-            print(f"⚠️ [Redis缓存] 获取已推荐列表异常(user={user_id}): {str(e)}")
+        except Exception:
             return set()
 
     def is_post_recommended(self, user_id: int, post_id: int, cached_recommended_set: Set[int] = None) -> bool:
-        """
-        检查投稿是否已推荐（复用预加载的集合，避免多次Redis调用）
-        :param user_id: 用户ID
-        :param post_id: 投稿ID
-        :param cached_recommended_set: 预加载的已推荐集合（可选，避免重复查询）
-        :return: 是否已推荐
-        """
         recommended_set = cached_recommended_set or self._get_all_recommended_post_ids(user_id)
         return post_id in recommended_set
 
     def set_post_recommended_batch(self, user_id: int, post_ids: List[int]):
-        """
-        批量设置推荐列表缓存（1次Redis调用写入所有postId，5分钟过期）
-        :param user_id: 用户ID
-        :param post_ids: 本次推荐的postId列表（非空）
-        """
         if not post_ids:
-            print(f"⚠️ [Redis缓存] 推荐列表为空，无需设置(user={user_id})")
             return
-
         try:
-            # 生成缓存key：包含本次推荐列表的第一个postId
             first_post_id = post_ids[0]
             cache_key = f"post:recommended:{user_id}:{first_post_id}"
-
-            # 原子化批量操作（先删旧key→批量写入→设置过期）
-            self.redis_client.delete(cache_key)  # 清理残留
+            self.redis_client.delete(cache_key)
             post_ids_str = [str(pid) for pid in post_ids]
-            self.redis_client.rpush(cache_key, *post_ids_str)  # 批量写入列表
-            self.redis_client.expire(cache_key, 300)  # 5分钟过期
+            self.redis_client.rpush(cache_key, *post_ids_str)
+            self.redis_client.expire(cache_key, 300)  # 5分钟
+        except Exception:
+            pass
 
-            print(
-                f"✅ [Redis缓存] 批量设置推荐缓存(user={user_id}, key={cache_key})，包含{len(post_ids)}个投稿，5分钟后过期")
-        except Exception as e:
-            print(f"⚠️ [Redis缓存] 批量设置异常(user={user_id}): {str(e)}")
-
-    # ====================== 原有方法修改 ======================
-    # ====================== 原有方法修改 ======================
     def _processRequestData(self, req: RecommendRequestDTO):
-        """处理请求中的视频、交互数据 和 用户标签"""
         posts = []
         for post in req.postList:
-            post_dict = {
+            posts.append({
                 "post_id": post.postId,
                 "title": post.title or "",
                 "tags": post.tags or "",
                 "category": post.category or ""
-            }
-            posts.append(post_dict)
+            })
 
-        user_tags = []
-        if hasattr(req, 'userTagList') and req.userTagList:
-            user_tags = [tag.tagName for tag in req.userTagList
-                         if getattr(tag, 'tagName', None)]
+        user_tags = [tag.tagName for tag in req.userTagList if getattr(tag, 'tagName', None)]
 
         if posts:
             self.postMeta = {v["post_id"]: v for v in posts}
             self.contentService.buildPostVectors(posts)
             self.postFeatures = self.contentService.postVectors.copy()
-
-            # 关键改进：把 vectorizer 传递给 ColdStartService
             self.coldStartService.vectorizer = self.contentService.vectorizer
-            # 关键：将内容向量传递给冷启动模块
-            self.coldStartService.setCandidatePosts(posts,
-                                                    content_vectors=self.contentService.postVectors)
+            self.coldStartService.setCandidatePosts(posts, content_vectors=self.contentService.postVectors)
 
         # 处理交互记录
         interactionsMap: Dict[int, List[tuple]] = {}
@@ -158,7 +111,7 @@ class RecommendService:
             weight = 1.0 if inter.isLike == 1 else (-0.8 if inter.isDislike == 1 else 0.3)
             interactionsMap.setdefault(uid, []).append((vid, weight))
 
-        return interactionsMap, user_tags  # 返回 (interactionsMap, user_tags)
+        return interactionsMap, user_tags
 
     async def getRecommendationPostList(self, userId: int, isColdStart: bool,
                                         reqBody: RecommendRequestDTO,
@@ -167,40 +120,29 @@ class RecommendService:
                                         wDiv: float = 0.2,
                                         wBound: float = 0.15) -> Dict[str, Any]:
 
-        # 统一只调用一次 _processRequestData
         interactionsMap, user_tags = self._processRequestData(reqBody)
         userInteractions = interactionsMap.get(userId, [])
-
-        # 提取用户已交互的视频ID集合
         interacted_post_ids = {vid for vid, _ in userInteractions}
-        print(f"🔍 DEBUG [user={userId}] 已交互视频数量 = {len(interacted_post_ids)}")
 
-        # 提前加载用户所有已推荐的postId
         cached_recommended_set = self._get_all_recommended_post_ids(userId)
 
-        # 更新内容画像（非冷启动或有交互时）
         if userInteractions:
             self.contentService.updateUserProfile(userId, userInteractions)
 
         # ====================== 冷启动路径 ======================
         if isColdStart:
-            # 注册用户标签 → 生成冷启动向量
             if user_tags:
                 self.coldStartService.registerUser(userId, user_tags)
             else:
-                print(f"⚠️ 用户{userId} 没有传递兴趣标签，使用兜底标签")
                 self.coldStartService.registerUser(userId, ["科技", "生活", "娱乐"])
 
             recs = self.coldStartService.recommend(userId, pageSize)
 
-            # 过滤：已交互 + 已推荐
-            recs = [
-                item for item in recs
-                if item["post_id"] not in interacted_post_ids
-                   and not self.is_post_recommended(userId, item["post_id"], cached_recommended_set)
-            ]
+            # 过滤已交互和已推荐
+            recs = [item for item in recs
+                    if item["post_id"] not in interacted_post_ids
+                    and not self.is_post_recommended(userId, item["post_id"], cached_recommended_set)]
 
-            # 补充热门视频
             if len(recs) < pageSize:
                 popular_recs = self.coldStartService._popularRecommendation(pageSize * 2)
                 for item in popular_recs:
@@ -209,7 +151,6 @@ class RecommendService:
                             and len(recs) < pageSize):
                         recs.append(item)
 
-            # 构建返回结果
             items = [
                 RecommendItem(
                     postId=item["post_id"],
@@ -220,46 +161,41 @@ class RecommendService:
             ]
 
             if items:
-                post_ids = [item.postId for item in items]
-                self.set_post_recommended_batch(userId, post_ids)
+                self.set_post_recommended_batch(userId, [item.postId for item in items])
+
+            # ====================== 冷启动实验指标计算 ======================
+            experiment_metrics = {}
+            from config.config import isExperiment
+            if isExperiment and self.postFeatures:
+                experiment_metrics = self.compute_experiment_metrics(
+                    recommend_list=recs[:pageSize],  # recs 是 cold start 返回的列表
+                    postFeatures=self.postFeatures
+                )
 
             return {
                 "userId": userId,
                 "recommendPostList": items,
                 "isColdStart": True,
-                "message": f"冷启动阶段 - 基于注册兴趣标签向量推荐（{len(user_tags)}个标签）",
+                "message": "冷启动推荐",
                 "actualParams": {"alpha": None, "wDiv": None, "wBound": None},
-                "debugQueryParams": {
-                    "userId": userId,
-                    "isColdStart": True,
-                    "pageSize": pageSize,
-                    "userTagsCount": len(user_tags)
-                },
-                "debugRequestBody": reqBody.model_dump()
+                "debugQueryParams": {"userId": userId, "isColdStart": True, "pageSize": pageSize},
+                "experimentMetrics": experiment_metrics,  # 新增
             }
 
-        # ====================== 正常混合推荐路径 ======================
+        # ====================== 混合推荐路径 ======================
         content_exclude_ids = interacted_post_ids.union(cached_recommended_set)
 
         cfScores = self.getCFScores(
-            userId,
-            candidateSize=150,
+            userId, candidateSize=150,
             exclude_post_ids=interacted_post_ids,
             cached_recommended_set=cached_recommended_set
         )
 
         contentScores = self.contentService.getContentScores(
-            userId,
-            candidateSize=150,
-            exclude_post_ids=content_exclude_ids
+            userId, candidateSize=150, exclude_post_ids=content_exclude_ids
         )
 
-        fusionParams = RecommendParam(
-            alpha=alpha,
-            wDiv=wDiv,
-            wBound=wBound,
-            topN=pageSize
-        )
+        fusionParams = RecommendParam(alpha=alpha, wDiv=wDiv, wBound=wBound, topN=pageSize)
         fusedResults = self.fusionService.fuseAndRecommend(
             params=fusionParams,
             cfScores=cfScores,
@@ -267,171 +203,196 @@ class RecommendService:
             postFeatures=self.postFeatures
         )
 
-        items = []
-        for item in fusedResults:
-            items.append(RecommendItem(
+        items = [
+            RecommendItem(
                 postId=item["postId"],
                 finalScore=item["finalScore"],
                 hybridScore=item["hybridScore"],
-                reason="混合推荐 (CF + 内容特征)" if cfScores else "内容驱动推荐"
-            ))
+                reason="混合推荐 (CF + 内容特征)"
+            ) for item in fusedResults
+        ]
 
         if items:
-            post_ids = [item.postId for item in items]
-            self.set_post_recommended_batch(userId, post_ids)
+            self.set_post_recommended_batch(userId, [item.postId for item in items])
+
+        # ====================== 实验指标计算（直接集成到原有流程） ======================
+        experiment_metrics = {}
+        from config.config import isExperiment
+        if isExperiment and not isColdStart and self.postFeatures:
+            # 使用 fusedResults（原始融合结果，包含 postId）
+            experiment_metrics = self.compute_experiment_metrics(
+                recommend_list=fusedResults,  # fusedResults 是 List[Dict]，包含 "postId"
+                postFeatures=self.postFeatures
+            )
 
         return {
             "userId": userId,
             "recommendPostList": items,
             "isColdStart": False,
             "message": f"混合推荐完成 (α={alpha:.2f}, 多样性={wDiv:.2f}, 破圈={wBound:.2f})",
-            "actualParams": {
-                "alpha": round(alpha, 4),
-                "wDiv": round(wDiv, 4),
-                "wBound": round(wBound, 4)
-            },
-            "debugQueryParams": {
-                "userId": userId,
-                "isColdStart": False,
-                "pageSize": pageSize,
-                "alpha": alpha,
-                "wDiv": wDiv,
-                "wBound": wBound
-            },
-            "debugRequestBody": reqBody.model_dump()
+            "actualParams": {"alpha": round(alpha, 4), "wDiv": round(wDiv, 4), "wBound": round(wBound, 4)},
+            "experimentMetrics": experiment_metrics,  # 新增：实验指标
         }
 
     def getCFScores(self, userId: int, candidateSize: int = 150,
                     exclude_post_ids: set = None, cached_recommended_set: Set[int] = None) -> Dict[int, float]:
-        """
-        CF分数获取（优化版：复用预加载的已推荐集合，无额外Redis调用）
-        """
         if self.bprModel is None or self.bprModel.user_factors is None:
             return {}
 
-        # 初始化已交互排除集合
-        final_exclude_ids = set(exclude_post_ids) if exclude_post_ids else set()
+        final_exclude = set(exclude_post_ids) if exclude_post_ids else set()
+        raw_cf_scores = self.bprModel.predict_scores(userId, exclude_post_ids=final_exclude)
 
-        # 获取原始CF分数（过滤已交互）
-        raw_cf_scores = self.bprModel.predict_scores(userId, exclude_post_ids=final_exclude_ids)
-
-        # 过滤已推荐（复用预加载集合）
         recommended_set = cached_recommended_set or self._get_all_recommended_post_ids(userId)
         filtered_cf_scores = {
             post_id: score for post_id, score in raw_cf_scores.items()
             if post_id not in recommended_set
         }
 
-        # 按分数降序取前N个
         sorted_filtered = dict(
             sorted(filtered_cf_scores.items(), key=lambda x: x[1], reverse=True)[:candidateSize]
         )
-
-        print(f"🔍 DEBUG [user={userId}] 过滤已推荐缓存后，CF分数数量 = {len(sorted_filtered)}")
         return sorted_filtered
 
     def train_cf_model_with_data(self, df: pd.DataFrame, videos: list,
-                                 n_items: int = None,
+                                 n_users: int = None, n_items: int = None,
+                                 user_to_temp: Dict[int, int] = None,
+                                 temp_to_user: Dict[int, int] = None,
                                  post_to_temp: Dict[int, int] = None,
                                  temp_to_post: Dict[int, int] = None) -> bool:
-        """接收 Controller 处理好的 DataFrame 和映射进行训练"""
         try:
             if df.empty:
-                print("⚠️ 传入的交互数据为空，无法训练")
+                print("⚠️ 交互数据为空，无法训练")
                 return False
 
-            # 如果没有传入映射（兼容旧调用）
-            if n_items is None or post_to_temp is None or temp_to_post is None:
-                print("⚠️ 映射参数缺失，使用旧逻辑...")
-                n_users = int(df['user_id'].max() + 1)
-                n_items_old = max(
-                    int(df['post_id'].max() + 1),
-                    max((v.get('postId') or v.get('post_id') or 0 for v in videos), default=0) + 100
-                )
-                success = self.bprModel.fit(df, n_users, n_items_old)
-                if success:
-                    self.bprModel.save_to_redis(self.redis_client)
-                    print("🎉 BPR 模型训练完成（旧逻辑）并已保存到 Redis！")
-                return success
-
-            # 新逻辑：使用连续 tempPostId
-            n_users = int(df['user_id'].max() + 1) + 10
-            print(f"✅ 使用连续 tempPostId 训练 → 用户≈{n_users} | 视频={n_items} | 交互={len(df)}")
-            print(f"正反馈比例: {(df['score'] > 0).mean():.1%}")
-
-            success = self.bprModel.fit(df, n_users, n_items, temp_column='tempPostId')
-            if success:
-                # 保存映射到模型对象（随模型一起持久化）
-                self.bprModel.post_to_temp = dict(post_to_temp)
-                self.bprModel.temp_to_post = dict(temp_to_post)
-                self.bprModel.save_to_redis(self.redis_client)
-                print("🎉 BPR 模型训练完成（使用连续 tempPostId）并已成功保存到 Redis！")
-                return True
+            if n_users is None or n_items is None:
+                # 兼容旧逻辑
+                n_users_old = int(df['user_id'].max() + 1) + 10
+                n_items_old = max(int(df['post_id'].max() + 1), 100)
+                success = self.bprModel.fit(df, n_users_old, n_items_old)
             else:
-                print("❌ BPR fit 方法返回失败")
-                return False
+                print(f"🚀 开始训练 BPR 模型 | 用户={n_users} | 视频={n_items}")
+                success = self.bprModel.fit(
+                    df, n_users, n_items,
+                    user_column="tempUserId", temp_column="tempPostId"
+                )
 
-        except Exception as e:
-            print(f"❌ Service 训练异常: {type(e).__name__} - {e}")
-            import traceback
-            traceback.print_exc()
+            if success:
+                if n_users is not None:
+                    self.bprModel.user_to_temp = dict(user_to_temp or {})
+                    self.bprModel.temp_to_user = dict(temp_to_user or {})
+                    self.bprModel.post_to_temp = dict(post_to_temp or {})
+                    self.bprModel.temp_to_post = dict(temp_to_post or {})
+
+                self.bprModel.save_to_redis(self.redis_client)
+                print("🎉 BPR 模型训练完成并已保存到 Redis")
+                return True
             return False
 
-    # ====================== 新增：冷启动标签获取（Service 协调层） ======================
-    def get_cold_start_tags(self, videos: List[Dict], limit: int = 50) -> Dict[str, Any]:
-        """
-        获取冷启动兴趣标签列表 - 带 Redis 缓存
-        缓存 Key: cold_start:tag-list
-        过期时间: 30 天（1个月）
-        """
-        cache_key = "cold_start:tag-list"
+        except Exception as e:
+            print(f"❌ BPR 模型训练异常: {e}")
+            return False
 
+    def get_cold_start_tags(self, videos: List[Dict], limit: int = 50) -> Dict[str, Any]:
+        cache_key = "cold_start:tag-list"
         try:
-            # 1. 先检查 Redis 缓存
-            cached_tags = self.redis_client.get(cache_key)
-            if cached_tags:
-                import pickle
-                tags = pickle.loads(cached_tags)
-                print(f"✅ [Redis缓存] 命中冷启动标签缓存，返回 {len(tags)} 个标签")
+            cached = self.redis_client.get(cache_key)
+            if cached:
+                tags = pickle.loads(cached)
                 return {"tags": tags}
 
-            print(f"🔧 [RecommendService] 未命中缓存，开始协调冷启动标签提取，视频数量: {len(videos)}")
-
-            # 2. 调用 ColdStartService 执行标签提取
             tags = self.coldStartService.extract_cold_start_tags(videos, limit=limit)
 
-            # 3. 将标签列表缓存到 Redis（序列化后存储）
-            import pickle
             self.redis_client.set(
-                cache_key,
-                pickle.dumps(tags),
-                ex=30 * 24 * 60 * 60  # 30天 = 2592000 秒
+                cache_key, pickle.dumps(tags), ex=30 * 24 * 60 * 60
             )
+            return {"tags": tags}
 
-            print(f"✅ [Redis缓存] 冷启动标签已缓存到 Redis (key={cache_key})，有效期30天 | 标签数量: {len(tags)}")
-
-            return {
-                "tags": tags
-            }
-
-        except Exception as e:
-            print(f"❌ [RecommendService] 协调冷启动标签时异常: {e}")
-            import traceback
-            traceback.print_exc()
-
-            # 异常时尝试从缓存读取（兜底）
-            try:
-                cached_tags = self.redis_client.get(cache_key)
-                if cached_tags:
-                    import pickle
-                    tags = pickle.loads(cached_tags)
-                    print("⚠️ 使用 Redis 缓存中的旧标签作为兜底")
-                    return {"tags": tags}
-            except:
-                pass
-
-            # 最终兜底：返回默认标签
+        except Exception:
+            # 兜底
             tags = self.coldStartService.extract_cold_start_tags([], limit=limit)
-            return {
-                "tags": tags
-            }
+            return {"tags": tags}
+
+    def compute_experiment_metrics(self,
+                                   recommend_list: List[Dict[str, Any]],
+                                   postFeatures: Dict[int, np.ndarray],
+                                   postCategories: Dict[int, str] = None) -> Dict[str, float]:
+        """
+        计算论文实验 6.2.1 中需要的两个关键指标：
+        - ILD (Intra-List Diversity)：列表内视频间的平均不相似度
+        - Novelty：基于流行度逆数加权的新颖性
+
+        会在控制台直接打印实验指标，同时返回给调用方。
+        """
+        if not recommend_list:
+            print("⚠️ [Experiment Metrics] 推荐列表为空，无法计算指标")
+            return {"ILD": 0.0, "Novelty": 0.0}
+
+        from config.config import isExperiment
+        if not isExperiment:
+            print("ℹ️ [Experiment Metrics] 实验模式已关闭 (isExperiment=False)")
+            return {"ILD": 0.0, "Novelty": 0.0, "note": "实验模式已关闭"}
+
+        # ====================== 统一提取 post_id ======================
+        post_ids = []
+        for item in recommend_list:
+            pid = item.get("postId") or item.get("post_id")
+            if pid is not None:
+                post_ids.append(int(pid))
+
+        n = len(post_ids)
+        if n == 0:
+            print("⚠️ [Experiment Metrics] 无法提取有效的 post_id")
+            return {"ILD": 0.0, "Novelty": 0.0}
+
+        # ====================== 1. 计算 Intra-List Diversity (ILD) ======================
+        ild_sum = 0.0
+        pair_count = 0
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                vid1 = post_ids[i]
+                vid2 = post_ids[j]
+                vec1 = postFeatures.get(vid1, np.zeros(self.vectorDim, dtype=np.float32))
+                vec2 = postFeatures.get(vid2, np.zeros(self.vectorDim, dtype=np.float32))
+
+                if np.linalg.norm(vec1) > 1e-8 and np.linalg.norm(vec2) > 1e-8:
+                    sim = HybridFusionService._cosineSimilarity(vec1, vec2)
+                    ild_sum += (1.0 - sim)
+                    pair_count += 1
+
+        ild = (ild_sum / max(1, pair_count)) if pair_count > 0 else 0.0
+
+        # ====================== 2. 计算 Novelty ======================
+        novelty_sum = 0.0
+        for vid in post_ids:
+            pop = 0.0
+            if hasattr(self, 'coldStartService') and vid in self.coldStartService.postPopularity:
+                pop = self.coldStartService.postPopularity.get(vid, 0.3)
+            else:
+                pop = 0.3
+
+            novelty = -np.log(max(pop, 1e-6)) if pop > 0 else 0.0
+            novelty_sum += novelty
+
+        novelty = novelty_sum / max(1, n)
+
+        # ====================== 在控制台输出实验指标 ======================
+        mode = "冷启动" if recommend_list and "reason" in recommend_list[0] and "冷启动" in str(
+            recommend_list[0].get("reason", "")) else "混合推荐"
+
+        print("\n" + "=" * 80)
+        print(f"📊 【实验指标】 {mode} | Top-{n} 推荐结果")
+        print(f"   ILD (多样性)     : {ild:.4f}")
+        print(f"   Novelty (新颖性) : {novelty:.4f}")
+        print(f"   列表大小         : {n}")
+        print(
+            f"   参数设置         : α={recommend_list[0].get('hybridScore', 'N/A') if 'hybridScore' in str(recommend_list[0]) else 'N/A'}")  # 简单提示
+        print("=" * 80 + "\n")
+
+        # ====================== 返回结果（保持接口正常） ======================
+        return {
+            "ILD": round(ild, 4),
+            "Novelty": round(novelty, 4),
+            "list_size": n,
+            "post_ids": post_ids[:8]
+        }
