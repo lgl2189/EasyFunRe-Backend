@@ -29,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * @author ：Star
@@ -135,7 +136,7 @@ public class ContentServiceImpl implements ContentService {
     public ContentPostDTO getPost(Long postId, Long userId) throws Exception {
         // 获取投稿内容
         ContentPostDBO contentPostDBO = postMapper.selectById(postId);
-        if(contentPostDBO == null){
+        if (contentPostDBO == null) {
             return null;
         }
         LambdaQueryWrapper<ContentPostResourceDBO> resourceListWrapper = new LambdaQueryWrapper<>();
@@ -151,7 +152,7 @@ public class ContentServiceImpl implements ContentService {
         interactionQueryWrapper.eq(ContentInteractionRecordDBO::getTargetPostId, postId);
         interactionQueryWrapper.eq(ContentInteractionRecordDBO::getOwnerId, userId);
         ContentInteractionRecordDBO interactionRecordDBO = interactionRecordMapper.selectOne(interactionQueryWrapper);
-        if(interactionRecordDBO != null){
+        if (interactionRecordDBO != null) {
             contentPostDTO.setIsLike(interactionRecordDBO.getIsLike());
             contentPostDTO.setIsDislike(interactionRecordDBO.getIsDislike());
         }
@@ -298,5 +299,23 @@ public class ContentServiceImpl implements ContentService {
         Page<ContentPostDBO> page = new Page<>(pageNum, pageSize);
         postMapper.searchPostByKeywordList(page, keywordList);
         return postStructMapper.fromPage(page);
+    }
+
+    @Override
+    public ContentPostListDTO getHotPostList(Integer pageNum, Integer pageSize) {
+        Page<ContentPostDBO> page = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<ContentPostDBO> wrapper = new LambdaQueryWrapper<ContentPostDBO>()
+                .orderByDesc(ContentPostDBO::getViewCount);
+        postMapper.selectPage(page, wrapper);
+        ContentPostListDTO contentPostListDTO = postStructMapper.fromPage(page);
+        contentPostListDTO.setPostList(contentPostListDTO.getPostList().stream().peek(post -> {
+            try {
+                post.setCoverUrl(minioService.getPresignedGetUrl(post.getCoverKey()));
+            }
+            catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }).toList());
+        return contentPostListDTO;
     }
 }

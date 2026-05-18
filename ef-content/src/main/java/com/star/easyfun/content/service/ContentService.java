@@ -64,4 +64,13 @@ public interface ContentService {
      * @return 投稿列表
      */
     ContentPostListDTO searchPost(List<String> keywordList, Integer pageNum, Integer pageSize);
+
+    /**
+     * 获取热门投稿列表
+     * @param pageNum 页码
+     * @param pageSize 每页数量
+     * @return 热门投稿列表
+     */
+    ContentPostListDTO getHotPostList(Integer pageNum, Integer pageSize);
+
 }

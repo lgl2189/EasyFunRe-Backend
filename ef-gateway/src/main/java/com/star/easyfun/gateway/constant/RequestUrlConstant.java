@@ -12,6 +12,8 @@ public class RequestUrlConstant {
             "/auth/login/sms",
             "/auth/login/password",
             // token登录是借由AuthFilter处理的，所以这里不需要忽略token登录的url
-            "/auth/refresh/token"
+            "/auth/refresh/token",
+            // 获取随机推荐列表，用于未登录用户
+            "/content/post/hot/list"
     };
 }

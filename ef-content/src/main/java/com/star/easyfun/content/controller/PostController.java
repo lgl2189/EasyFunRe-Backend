@@ -91,4 +91,10 @@ public class PostController {
         return ResultUtil.success_10000(contentPostListDTO, "搜索结果分页列表获取成功");
     }
 
+    @GetMapping("/hot/list")
+    public Result getHotPostList(@RequestParam("pageNum") Integer pageNum, @RequestParam("pageSize") Integer pageSize) {
+        ContentPostListDTO contentPostListDTO = contentService.getHotPostList(pageNum, pageSize);
+        return ResultUtil.success_10000(contentPostListDTO, "热门视频投稿列表成功");
+    }
+
 }

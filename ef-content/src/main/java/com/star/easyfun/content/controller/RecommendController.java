@@ -33,7 +33,9 @@ public class RecommendController {
             @RequestHeader(CommonRequestHeader.HEADER_USER_ID) Long userId,
             @RequestParam("pageSize") Integer pageSize) throws JsonProcessingException {
         List<ContentPostDTO> contentPostDTOList = recommendService.getRecommendPostList(userId, pageSize);
-        return ResultUtil.success_10000(contentPostDTOList, "推荐列表获得成功");
+        Map<String, Object> result = new HashMap<>();
+        result.put("postList", contentPostDTOList);
+        return ResultUtil.success_10000(result, "推荐列表获得成功");
     }
 
     @GetMapping("/video/all")
